@@ -75,5 +75,16 @@ export function buildContainer() {
     );
   }
 
-  return { checkEventAvailability, subscribeUserToEvent, subscribeUserToEventCrowder, schedulers, db };
+  return {
+    checkEventAvailability,
+    subscribeUserToEvent,
+    subscribeUserToEventCrowder,
+    schedulers,
+    db,
+    // Expuestos para scripts de prueba manual (ver scripts/), que arman su
+    // propio CheckEventAvailability con un provider de prueba pero quieren
+    // reusar la persistencia y los notificadores reales.
+    eventStateRepository,
+    notifySubscribers,
+  };
 }
