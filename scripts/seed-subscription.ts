@@ -1,11 +1,16 @@
 /**
- * Script manual de un solo uso para el paso 8 del plan (prueba end-to-end):
- * crea una suscripción de Telegram para el evento vigilado y fuerza un
- * estado previo distinto en SQLite, así el primer tick real del scheduler
- * ve un "cambio" y dispara la notificación sin esperar a que Ticketmaster
- * cambie de estado por su cuenta.
+ * Script manual reusable: crea suscripciones de Telegram para los eventos
+ * vigilados. Si un evento todavía no tiene fila en `event_state`, fuerza
+ * su estado previo a OFFSALE para que el primer tick real dispare una
+ * notificación de prueba; si ya tiene estado real (porque ya se venía
+ * vigilando), lo deja intacto — así agregar un suscriptor nuevo a un
+ * evento existente no le miente al sistema sobre su estado actual.
  *
- * Uso: npx tsx scripts/seed-subscription.ts <chatId>
+ * Uso: npx tsx scripts/seed-subscription.ts <chatId> [idsTicketmaster]
+ *   idsTicketmaster: opcional, coma-separado. Si no se pasa, usa
+ *   WATCHED_EVENT_IDS del .env (útil cuando esa variable está
+ *   deshabilitada a propósito pero igual quieres suscribir a alguien
+ *   a un evento puntual).
  */
 import { buildContainer } from "../src/config/container";
 import { env } from "../src/config/env";
@@ -15,8 +20,11 @@ import { CROWDER_ID_PREFIX } from "../src/infrastructure/event-providers/crowder
 async function main() {
   const chatId = process.argv[2];
   if (!chatId) {
-    throw new Error("Uso: npx tsx scripts/seed-subscription.ts <chatId>");
+    throw new Error("Uso: npx tsx scripts/seed-subscription.ts <chatId> [idsTicketmaster]");
   }
+  const ticketmasterIds = process.argv[3]
+    ? process.argv[3].split(",").map((id) => id.trim()).filter((id) => id.length > 0)
+    : env.watchedEventIds;
 
   const { subscribeUserToEvent, subscribeUserToEventCrowder, db } = buildContainer();
 
@@ -29,7 +37,12 @@ async function main() {
     return row !== undefined;
   }
 
-  for (const eventId of env.watchedEventIds) {
+  function hasKnownState(eventId: string): boolean {
+    const row = db.prepare("SELECT 1 FROM event_state WHERE event_id = ?").get(eventId);
+    return row !== undefined;
+  }
+
+  for (const eventId of ticketmasterIds) {
     if (alreadySubscribed(eventId)) {
       console.log(`[seed] ya existía suscripción activa para ${eventId} -> chat ${chatId}, no se duplica`);
       continue;
@@ -43,12 +56,16 @@ async function main() {
     );
     console.log(`[seed] suscripción creada: ${subscription.id} -> evento ${eventId} -> chat ${chatId}`);
 
-    db.prepare(
-      `INSERT INTO event_state (event_id, status, updated_at)
-       VALUES (?, 'OFFSALE', ?)
-       ON CONFLICT(event_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at`
-    ).run(eventId, new Date().toISOString());
-    console.log(`[seed] estado previo forzado a OFFSALE para ${eventId} (para provocar el cambio en el próximo tick)`);
+    if (hasKnownState(eventId)) {
+      console.log(`[seed] ${eventId} ya tenía estado real registrado, no se toca`);
+    } else {
+      db.prepare(
+        `INSERT INTO event_state (event_id, status, updated_at)
+         VALUES (?, 'OFFSALE', ?)
+         ON CONFLICT(event_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at`
+      ).run(eventId, new Date().toISOString());
+      console.log(`[seed] estado previo forzado a OFFSALE para ${eventId} (para provocar el cambio en el próximo tick)`);
+    }
   }
 
   if (env.crowder.watchedItemIds.length > 0) {

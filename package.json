@@ -4,7 +4,7 @@
   "description": "Sistema de alertas tempranas de disponibilidad de eventos (Ticketmaster -> Telegram)",
   "main": "dist/main.js",
   "engines": {
-    "node": ">=18"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",
