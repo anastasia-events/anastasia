@@ -38,6 +38,48 @@ export class SqliteSubscriptionRepository implements SubscriptionRepositoryPort 
     return rows.map(toDomain);
   }
 
+  async findActiveByUserId(userId: string): Promise<Subscription[]> {
+    const rows = this.db
+      .prepare<[string], SubscriptionRow>(
+        "SELECT * FROM subscriptions WHERE user_id = ? AND active = 1"
+      )
+      .all(userId);
+
+    return rows.map(toDomain);
+  }
+
+  async findById(subscriptionId: string): Promise<Subscription | null> {
+    const row = this.db
+      .prepare<[string], SubscriptionRow>("SELECT * FROM subscriptions WHERE id = ?")
+      .get(subscriptionId);
+
+    return row ? toDomain(row) : null;
+  }
+
+  async findByEventChannelAndTarget(
+    eventId: string,
+    channel: NotificationChannel,
+    channelTarget: string
+  ): Promise<Subscription | null> {
+    const row = this.db
+      .prepare<[string, string, string], SubscriptionRow>(
+        "SELECT * FROM subscriptions WHERE event_id = ? AND channel = ? AND channel_target = ?"
+      )
+      .get(eventId, channel, channelTarget);
+
+    return row ? toDomain(row) : null;
+  }
+
+  async updateChannelTargetForUser(
+    userId: string,
+    channel: NotificationChannel,
+    channelTarget: string
+  ): Promise<void> {
+    this.db
+      .prepare("UPDATE subscriptions SET channel_target = ? WHERE user_id = ? AND channel = ?")
+      .run(channelTarget, userId, channel);
+  }
+
   async save(subscription: Subscription): Promise<void> {
     this.db
       .prepare(

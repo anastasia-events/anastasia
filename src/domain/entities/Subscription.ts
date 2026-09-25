@@ -46,4 +46,28 @@ export class Subscription {
       active: true,
     });
   }
+
+  deactivate(): Subscription {
+    return new Subscription({
+      id: this.id,
+      userId: this.userId,
+      eventId: this.eventId,
+      channel: this.channel,
+      channelTarget: this.channelTarget,
+      createdAt: this.createdAt,
+      active: false,
+    });
+  }
+
+  reactivate(): Subscription {
+    return new Subscription({
+      id: this.id,
+      userId: this.userId,
+      eventId: this.eventId,
+      channel: this.channel,
+      channelTarget: this.channelTarget,
+      createdAt: this.createdAt,
+      active: true,
+    });
+  }
 }

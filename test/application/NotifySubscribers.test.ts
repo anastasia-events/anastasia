@@ -33,6 +33,9 @@ describe("NotifySubscribers", () => {
     const subscription = fakeSubscription(NotificationChannel.TELEGRAM);
     const subscriptionRepository: SubscriptionRepositoryPort = {
       findActiveByEventId: vi.fn().mockResolvedValue([subscription]),
+      findActiveByUserId: vi.fn(),
+      findById: vi.fn(),
+      findByEventChannelAndTarget: vi.fn(),
       save: vi.fn(),
     };
     const telegramNotifier: NotificationPort = {
@@ -55,6 +58,9 @@ describe("NotifySubscribers", () => {
     const subscription = fakeSubscription(NotificationChannel.CALL);
     const subscriptionRepository: SubscriptionRepositoryPort = {
       findActiveByEventId: vi.fn().mockResolvedValue([subscription]),
+      findActiveByUserId: vi.fn(),
+      findById: vi.fn(),
+      findByEventChannelAndTarget: vi.fn(),
       save: vi.fn(),
     };
 

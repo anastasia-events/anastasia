@@ -49,4 +49,18 @@ export const env = {
     pollingIntervalSeconds: optionalEnvInt("CROWDER_POLLING_INTERVAL_SECONDS", 60),
     pageCacheTtlSeconds: optionalEnvInt("CROWDER_PAGE_CACHE_TTL_SECONDS", 60),
   },
+
+  // Notificadores opcionales: si faltan sus variables, container.ts no los
+  // registra en notifiersByChannel (mismo patrón opt-in que Crowder) y esos
+  // canales quedan marcados FAILED al notificar, sin romper el arranque.
+  whatsapp: {
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+    templateName: process.env.WHATSAPP_TEMPLATE_NAME,
+    apiVersion: process.env.WHATSAPP_API_VERSION ?? "v20.0",
+  },
+  sendgrid: {
+    apiKey: process.env.SENDGRID_API_KEY,
+    fromEmail: process.env.SENDGRID_FROM_EMAIL,
+  },
 };

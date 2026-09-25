@@ -11,7 +11,9 @@
  *   watched-events.json, con el prefijo "crowder:" para ítems de Crowder).
  *   Si no se pasa, suscribe a TODOS los eventos de watched-events.json.
  */
+import { randomUUID } from "crypto";
 import { buildContainer } from "../src/config/container";
+import { User } from "../src/domain/entities/User";
 import { NotificationChannel } from "../src/domain/value-objects/NotificationChannel";
 
 async function main() {
@@ -23,7 +25,17 @@ async function main() {
     ? process.argv[3].split(",").map((id) => id.trim()).filter((id) => id.length > 0)
     : null;
 
-  const { watchedEvents, db } = buildContainer();
+  const { watchedEvents, db, userRepository } = buildContainer();
+
+  // El usuario "nace" por teléfono en el flujo real (ver FindOrCreateUserByPhone),
+  // pero este script solo tiene un chatId de prueba a mano — arma un usuario
+  // sin teléfono, linkeado directo al chat, igual que quedan los usuarios
+  // legacy migrados en la versión 2 del esquema.
+  let user = await userRepository.findByTelegramChatId(chatId);
+  if (!user) {
+    user = new User({ id: randomUUID(), phone: null, telegramChatId: chatId, createdAt: new Date() });
+    await userRepository.save(user);
+  }
 
   const targets = requestedIds
     ? watchedEvents.filter((entry) => requestedIds.includes(entry.id))
@@ -57,7 +69,7 @@ async function main() {
     }
 
     const subscription = await entry.subscribe.execute(
-      "test-user",
+      user.id,
       entry.id,
       NotificationChannel.TELEGRAM,
       chatId
