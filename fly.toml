@@ -1,0 +1,32 @@
+# app: cambia este nombre si "fly launch"/"fly apps create" te dice que ya
+# existe (los nombres son globales en Fly). region: elegí la más cercana con
+# `fly platform regions` (ej. "gru" São Paulo, "qro" Querétaro) — Bogotá no
+# tiene región propia en Fly, y "eze" (Buenos Aires) ya no acepta recursos
+# nuevos.
+app = "event-wa"
+primary_region = "gru"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  API_PORT = "3001"
+  DATABASE_PATH = "/data/event-watcher.sqlite"
+  STATIC_DIR = "/app/public"
+  POLLING_INTERVAL_SECONDS = "15"
+  CROWDER_POLLING_INTERVAL_SECONDS = "60"
+  CROWDER_PAGE_CACHE_TTL_SECONDS = "60"
+
+[[mounts]]
+  source = "event_watcher_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # El scheduler necesita correr sin parar — a diferencia del default de
+  # Fly (apagar la máquina cuando no hay tráfico HTTP), acá la queremos
+  # siempre encendida aunque nadie visite el frontend.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1

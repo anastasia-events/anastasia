@@ -15,25 +15,21 @@ function optionalEnvInt(name: string, defaultValue: number): number {
   return Number.isFinite(parsed) ? parsed : defaultValue;
 }
 
-function optionalEnvDate(name: string): Date | undefined {
-  const raw = process.env[name];
-  if (!raw) return undefined;
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`Variable de entorno ${name} no es una fecha ISO válida: "${raw}"`);
-  }
-  return parsed;
-}
-
 export const env = {
   ticketmasterApiKey: requireEnv("TICKETMASTER_API_KEY"),
   telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
+  telegramBotUsername: requireEnv("TELEGRAM_BOT_USERNAME"),
   databasePath: process.env.DATABASE_PATH ?? "./data/event-watcher.sqlite",
 
-  watchedEventIds: (process.env.WATCHED_EVENT_IDS ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0),
+  apiPort: optionalEnvInt("API_PORT", 3001),
+  frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+  // Solo se setea en producción (Docker copia frontend/dist acá); en dev
+  // el frontend corre aparte con `vite dev` y esto queda undefined.
+  staticDir: process.env.STATIC_DIR,
+
+  // Lista de eventos observables (Ticketmaster + Crowder), con su info de
+  // display — ver config/watched-events.json.
+  watchedEventsFile: process.env.WATCHED_EVENTS_FILE ?? "./config/watched-events.json",
 
   pollingIntervalSeconds: optionalEnvInt("POLLING_INTERVAL_SECONDS", 15),
 
@@ -47,17 +43,10 @@ export const env = {
   },
 
   // Proveedor secundario: eventos de Ticketmaster.co vendidos por Crowder,
-  // fuera de la Discovery API. Opt-in — si CROWDER_WATCHED_ITEM_IDS está
-  // vacío no se levanta este scheduler.
+  // fuera de la Discovery API. Qué páginas/ítems vigilar vive en
+  // watched-events.json — acá solo quedan los parámetros globales.
   crowder: {
-    pageUrl: process.env.CROWDER_EVENT_PAGE_URL ?? "",
-    watchedItemIds: (process.env.CROWDER_WATCHED_ITEM_IDS ?? "")
-      .split(",")
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0),
     pollingIntervalSeconds: optionalEnvInt("CROWDER_POLLING_INTERVAL_SECONDS", 60),
     pageCacheTtlSeconds: optionalEnvInt("CROWDER_PAGE_CACHE_TTL_SECONDS", 60),
-    watchStartAt: optionalEnvDate("CROWDER_WATCH_START_AT"),
-    watchEndAt: optionalEnvDate("CROWDER_WATCH_END_AT"),
   },
 };

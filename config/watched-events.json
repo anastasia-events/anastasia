@@ -1,0 +1,37 @@
+{
+  "ticketmaster": [],
+  "crowder": [
+    {
+      "id": "preventa-army-membership-02-10",
+      "pageUrl": "https://www.ticketmaster.co/event/bts-world-tour-2026",
+      "name": "BTS World Tour 2026 — Preventa Army Membership (02/10)",
+      "venue": "Bogotá",
+      "activeFrom": "2026-10-01T00:00:00-05:00",
+      "activeUntil": "2026-10-03T23:59:00-05:00"
+    },
+    {
+      "id": "venta-general-02-10",
+      "pageUrl": "https://www.ticketmaster.co/event/bts-world-tour-2026",
+      "name": "BTS World Tour 2026 — Venta General (02/10)",
+      "venue": "Bogotá",
+      "activeFrom": "2026-10-01T00:00:00-05:00",
+      "activeUntil": "2026-10-03T23:59:00-05:00"
+    },
+    {
+      "id": "preventa-army-membership-03-10",
+      "pageUrl": "https://www.ticketmaster.co/event/bts-world-tour-2026",
+      "name": "BTS World Tour 2026 — Preventa Army Membership (03/10)",
+      "venue": "Bogotá",
+      "activeFrom": "2026-10-01T00:00:00-05:00",
+      "activeUntil": "2026-10-03T23:59:00-05:00"
+    },
+    {
+      "id": "venta-general-03-10",
+      "pageUrl": "https://www.ticketmaster.co/event/bts-world-tour-2026",
+      "name": "BTS World Tour 2026 — Venta General (03/10)",
+      "venue": "Bogotá",
+      "activeFrom": "2026-10-01T00:00:00-05:00",
+      "activeUntil": "2026-10-03T23:59:00-05:00"
+    }
+  ]
+}

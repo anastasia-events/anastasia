@@ -1,0 +1,60 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.subtitle {
+  color: var(--text);
+  margin-bottom: 32px;
+}
+
+.error {
+  color: #d1435b;
+}
+
+.event-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  text-align: left;
+}
+
+.event-info h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.venue {
+  margin: 0;
+  font-size: 14px;
+}
+
+.event-card button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.event-card button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
