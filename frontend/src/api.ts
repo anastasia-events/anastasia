@@ -10,7 +10,7 @@ export interface SubscribedEvent {
   id: string;
   name: string;
   venue: string;
-  // subscriptionId por canal activo; un canal ausente = no suscripto por ese medio.
+  // subscriptionId por canal activo; un canal ausente = no suscrito por ese medio.
   channels: Partial<Record<Channel, string>>;
 }
 
