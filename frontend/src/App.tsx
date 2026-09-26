@@ -153,7 +153,7 @@ function App() {
                   {isSubscribed && (
                     <p className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-ink">
                       <Check size={13} />
-                      Ya estás inscripto
+                      Ya estás inscrito
                     </p>
                   )}
                 </div>
@@ -180,9 +180,9 @@ function App() {
         {!loading && visibleEvents.length === 0 && !error && (
           <p className="mt-4 text-sm">
             {filter === "subscribed"
-              ? "No estás inscripto a ningún evento todavía."
+              ? "No estás inscrito a ningún evento todavía."
               : filter === "unsubscribed"
-                ? "Ya estás inscripto a todos los eventos vigilados."
+                ? "Ya estás inscrito a todos los eventos vigilados."
                 : "No hay eventos vigilados por el momento."}
           </p>
         )}

@@ -209,7 +209,7 @@ function SubscribeModal({ event, onClose }: SubscribeModalProps) {
           <>
             <p className="mt-6 flex items-center gap-2 text-heading">
               <Check size={18} className="text-emerald-600" />
-              ¡Listo! Ya quedaste suscripto.
+              ¡Listo! Ya quedaste suscrito.
             </p>
 
             {telegramDeepLink && (
