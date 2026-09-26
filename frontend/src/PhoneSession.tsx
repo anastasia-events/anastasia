@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { fetchAccountEmail } from "./api";
+import { fetchAccountEmail, PhoneNotAllowedError } from "./api";
 
 const PHONE_STORAGE_KEY = "eventwatcher:phone";
 
@@ -47,8 +47,14 @@ export function PhoneSessionProvider({ children }: { children: ReactNode }) {
       .then((value) => {
         if (!cancelled) setEmail(value);
       })
-      .catch(() => {
-        // Si falla, el usuario simplemente lo tipea de nuevo — no es crítico.
+      .catch((error) => {
+        // Sesión guardada de un número que ya no está habilitado: se cierra
+        // para que vuelva a identificarse y vea el aviso.
+        if (error instanceof PhoneNotAllowedError && !cancelled) {
+          writeStoredPhone(null);
+          setPhoneState(null);
+        }
+        // Cualquier otro error: el usuario simplemente tipea el email de nuevo.
       });
     return () => {
       cancelled = true;

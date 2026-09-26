@@ -234,7 +234,7 @@ describe("migraciones", () => {
     const userId = randomUUID();
     legacyDb
       .prepare("INSERT INTO users (id, phone, created_at) VALUES (?, ?, ?)")
-      .run(userId, "3147224936", "2026-01-01T00:00:00.000Z");
+      .run(userId, "3001234567", "2026-01-01T00:00:00.000Z");
     legacyDb
       .prepare(
         `INSERT INTO subscriptions (id, user_id, event_id, channel, channel_target, created_at, active)

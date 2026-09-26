@@ -26,6 +26,10 @@ export const env = {
   // Solo se setea en producción (Docker copia frontend/dist acá); en dev
   // el frontend corre aparte con `vite dev` y esto queda undefined.
   staticDir: process.env.STATIC_DIR,
+  // Celulares habilitados para usar la app, separados por coma. Mientras se
+  // prueba con números conocidos (los mismos de la lista de destinatarios de
+  // prueba de WhatsApp). Vacío o sin definir = cualquiera puede registrarse.
+  allowedPhones: process.env.ALLOWED_PHONES,
 
   // Lista de eventos observables (Ticketmaster + Crowder), con su info de
   // display — ver config/watched-events.json.
@@ -58,9 +62,17 @@ export const env = {
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
     templateName: process.env.WHATSAPP_TEMPLATE_NAME,
     apiVersion: process.env.WHATSAPP_API_VERSION ?? "v20.0",
+    // Los celulares se guardan sin código de país; la Cloud API lo exige.
+    defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE ?? "57",
+    // Webhook (estados de entrega / mensajes entrantes). El verify token lo
+    // inventamos nosotros y se pega igual en el panel de Meta; el app secret
+    // valida la firma X-Hub-Signature-256 de cada POST.
+    webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+    appSecret: process.env.WHATSAPP_APP_SECRET,
   },
-  sendgrid: {
-    apiKey: process.env.SENDGRID_API_KEY,
-    fromEmail: process.env.SENDGRID_FROM_EMAIL,
+  brevo: {
+    apiKey: process.env.BREVO_API_KEY,
+    senderEmail: process.env.BREVO_SENDER_EMAIL,
+    senderName: process.env.BREVO_SENDER_NAME ?? "Event Watcher",
   },
 };

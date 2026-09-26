@@ -3,9 +3,10 @@ import { Event } from "../../../domain/entities/Event";
 import { Subscription } from "../../../domain/entities/Subscription";
 import { NotificationStatus } from "../../../domain/value-objects/NotificationStatus";
 import { NotificationPort, NotificationResult } from "../../../application/ports/out/NotificationPort";
+import { statusLabel } from "../statusLabel";
 
 function buildMessage(event: Event): string {
-  return `🎫 *${event.name}*\nEstado: ${event.status}\nRecinto: ${event.venue}`;
+  return `🎫 *${event.name}*\nEstado: ${statusLabel(event.status)}\nRecinto: ${event.venue}`;
 }
 
 export class TelegramNotifier implements NotificationPort {

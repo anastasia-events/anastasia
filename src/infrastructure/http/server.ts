@@ -1,5 +1,5 @@
 import cors from "cors";
-import express, { Express } from "express";
+import express, { Express, Response } from "express";
 import fs from "fs";
 import { FindOrCreateUserByPhonePort } from "../../application/ports/in/FindOrCreateUserByPhonePort";
 import { ListUserSubscriptionsPort } from "../../application/ports/in/ListUserSubscriptionsPort";
@@ -10,6 +10,8 @@ import { SubscriptionRepositoryPort } from "../../application/ports/out/Subscrip
 import { UserRepositoryPort } from "../../application/ports/out/UserRepositoryPort";
 import { NotificationChannel } from "../../domain/value-objects/NotificationChannel";
 import { PendingTelegramLinkStore } from "../telegram/PendingTelegramLinkStore";
+import { normalizePhone } from "./phone";
+import { registerWhatsAppWebhook, WhatsAppWebhookConfig } from "./whatsappWebhook";
 
 export interface WatchedEventEntry {
   id: string;
@@ -35,16 +37,63 @@ export interface HttpServerDeps {
   // Carpeta con el build de Vite (frontend/dist copiado ahí en producción).
   // En dev queda sin definir: el frontend corre aparte con `vite dev`.
   staticDir?: string;
+  // Sin definir = webhook de WhatsApp deshabilitado (la ruta responde 404).
+  whatsappWebhook?: WhatsAppWebhookConfig;
+  // Celulares habilitados (ya normalizados). Sin definir = sin restricción.
+  allowedPhones?: Set<string>;
+  // Canales que se pueden activar desde la web. Sin definir = todos.
+  enabledChannels?: Set<NotificationChannel>;
 }
 
 export function buildHttpServer(deps: HttpServerDeps): Express {
   const app = express();
   app.use(cors({ origin: deps.frontendOrigin }));
+  // Antes de express.json(): el webhook necesita el body crudo para validar la firma.
+  registerWhatsAppWebhook(app, deps.whatsappWebhook);
   app.use(express.json());
 
   function findWatchedEvent(eventId: string): WatchedEventEntry | undefined {
     return deps.watchedEvents.find((entry) => entry.id === eventId);
   }
+
+  // Punto único de entrada del celular: lo normaliza (misma identidad sin
+  // importar espacios o "+57") y aplica la lista de permitidos. Si responde
+  // con error devuelve null y la ruta corta ahí.
+  function readPhone(raw: unknown, res: Response): string | null {
+    const phone = typeof raw === "string" ? normalizePhone(raw) : "";
+    if (!phone) {
+      res.status(400).json({ error: "phone requerido" });
+      return null;
+    }
+    if (deps.allowedPhones && !deps.allowedPhones.has(phone)) {
+      res.status(403).json({ error: "phone_not_allowed" });
+      return null;
+    }
+    return phone;
+  }
+
+  // Permite al frontend validar el número antes de guardarlo como sesión.
+  app.post("/api/session", (req, res) => {
+    const phone = readPhone(req.body?.phone, res);
+    if (!phone) return;
+    res.json({ phone });
+  });
+
+  // Canales con notificador configurado — el frontend solo ofrece estos, así
+  // un canal sin credenciales (ej. WhatsApp esperando la plantilla aprobada)
+  // no aparece en la web en vez de aceptar altas que después fallan.
+  function isChannelEnabled(channel: NotificationChannel, res: Response): boolean {
+    if (deps.enabledChannels && !deps.enabledChannels.has(channel)) {
+      res.status(503).json({ error: "channel_disabled" });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/channels", (_req, res) => {
+    const all = [NotificationChannel.TELEGRAM, NotificationChannel.WHATSAPP, NotificationChannel.EMAIL];
+    res.json(all.filter((channel) => !deps.enabledChannels || deps.enabledChannels.has(channel)));
+  });
 
   app.get("/api/events", (_req, res) => {
     // Lista estática desde watched-events.json — sin llamar al provider, así
@@ -60,16 +109,14 @@ export function buildHttpServer(deps: HttpServerDeps): Express {
 
   app.post("/api/subscriptions/telegram", async (req, res) => {
     const eventId = req.body?.eventId;
-    const phone = req.body?.phone;
+    const rawPhone = req.body?.phone;
     const entry = typeof eventId === "string" ? findWatchedEvent(eventId) : undefined;
     if (!entry) {
       res.status(400).json({ error: "eventId inválido o no vigilado" });
       return;
     }
-    if (typeof phone !== "string" || !phone) {
-      res.status(400).json({ error: "phone requerido" });
-      return;
-    }
+    const phone = readPhone(rawPhone, res);
+    if (!phone) return;
 
     const user = await deps.findOrCreateUser.execute(phone);
 
@@ -95,17 +142,16 @@ export function buildHttpServer(deps: HttpServerDeps): Express {
   });
 
   app.post("/api/subscriptions/whatsapp", async (req, res) => {
+    if (!isChannelEnabled(NotificationChannel.WHATSAPP, res)) return;
     const eventId = req.body?.eventId;
-    const phone = req.body?.phone;
+    const rawPhone = req.body?.phone;
     const entry = typeof eventId === "string" ? findWatchedEvent(eventId) : undefined;
     if (!entry) {
       res.status(400).json({ error: "eventId inválido o no vigilado" });
       return;
     }
-    if (typeof phone !== "string" || !phone) {
-      res.status(400).json({ error: "phone requerido" });
-      return;
-    }
+    const phone = readPhone(rawPhone, res);
+    if (!phone) return;
 
     const user = await deps.findOrCreateUser.execute(phone);
     // El target de WhatsApp es el mismo celular usado como identidad — no
@@ -120,29 +166,25 @@ export function buildHttpServer(deps: HttpServerDeps): Express {
   });
 
   app.get("/api/users/me", async (req, res) => {
-    const phone = req.query.phone;
-    if (typeof phone !== "string" || !phone) {
-      res.status(400).json({ error: "phone requerido" });
-      return;
-    }
+    const phone = readPhone(req.query.phone, res);
+    if (!phone) return;
 
     const user = await deps.userRepository.findByPhone(phone);
     res.json({ email: user?.email ?? null });
   });
 
   app.post("/api/subscriptions/email", async (req, res) => {
+    if (!isChannelEnabled(NotificationChannel.EMAIL, res)) return;
     const eventId = req.body?.eventId;
-    const phone = req.body?.phone;
+    const rawPhone = req.body?.phone;
     const email = req.body?.email;
     const entry = typeof eventId === "string" ? findWatchedEvent(eventId) : undefined;
     if (!entry) {
       res.status(400).json({ error: "eventId inválido o no vigilado" });
       return;
     }
-    if (typeof phone !== "string" || !phone) {
-      res.status(400).json({ error: "phone requerido" });
-      return;
-    }
+    const phone = readPhone(rawPhone, res);
+    if (!phone) return;
     if (typeof email !== "string" || !email) {
       res.status(400).json({ error: "email requerido" });
       return;
@@ -173,11 +215,8 @@ export function buildHttpServer(deps: HttpServerDeps): Express {
   });
 
   app.get("/api/subscriptions", async (req, res) => {
-    const phone = req.query.phone;
-    if (typeof phone !== "string" || !phone) {
-      res.status(400).json({ error: "phone requerido" });
-      return;
-    }
+    const phone = readPhone(req.query.phone, res);
+    if (!phone) return;
 
     const user = await deps.userRepository.findByPhone(phone);
     if (!user) {
@@ -209,11 +248,8 @@ export function buildHttpServer(deps: HttpServerDeps): Express {
   });
 
   app.delete("/api/subscriptions/:id", async (req, res) => {
-    const phone = req.query.phone;
-    if (typeof phone !== "string" || !phone) {
-      res.status(400).json({ error: "phone requerido" });
-      return;
-    }
+    const phone = readPhone(req.query.phone, res);
+    if (!phone) return;
 
     const user = await deps.userRepository.findByPhone(phone);
     if (!user) {

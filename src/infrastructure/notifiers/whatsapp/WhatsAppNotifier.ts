@@ -2,12 +2,21 @@ import { Event } from "../../../domain/entities/Event";
 import { Subscription } from "../../../domain/entities/Subscription";
 import { NotificationStatus } from "../../../domain/value-objects/NotificationStatus";
 import { NotificationPort, NotificationResult } from "../../../application/ports/out/NotificationPort";
+import { statusLabel } from "../statusLabel";
 
 export interface WhatsAppConfig {
   phoneNumberId: string;
   accessToken: string;
   templateName: string;
   apiVersion: string;
+  // Se antepone a los celulares locales de 10 dígitos (así se guardan en la
+  // base); sin él Meta interpreta otro número y responde #131030.
+  defaultCountryCode?: string;
+}
+
+function toInternational(target: string, countryCode: string): string {
+  const digits = target.replace(/\D/g, "");
+  return digits.length === 10 ? `${countryCode}${digits}` : digits;
 }
 
 /**
@@ -17,7 +26,7 @@ export interface WhatsAppConfig {
  * ser una plantilla ya aprobada en Meta Business Manager. Los params y su
  * orden (`WHATSAPP_TEMPLATE_NAME`) hay que ajustarlos para que coincidan
  * exactamente con la plantilla real una vez aprobada — esto es un primer
- * intento razonable con [nombre, recinto, estado].
+ * intento razonable con [nombre, recinto, estado en español].
  */
 export class WhatsAppNotifier implements NotificationPort {
   constructor(private readonly config: WhatsAppConfig) {}
@@ -34,7 +43,7 @@ export class WhatsAppNotifier implements NotificationPort {
           },
           body: JSON.stringify({
             messaging_product: "whatsapp",
-            to: subscription.channelTarget,
+            to: toInternational(subscription.channelTarget, this.config.defaultCountryCode ?? "57"),
             type: "template",
             template: {
               name: this.config.templateName,
@@ -45,7 +54,7 @@ export class WhatsAppNotifier implements NotificationPort {
                   parameters: [
                     { type: "text", text: event.name },
                     { type: "text", text: event.venue },
-                    { type: "text", text: event.status },
+                    { type: "text", text: statusLabel(event.status) },
                   ],
                 },
               ],

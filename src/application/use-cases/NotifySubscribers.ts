@@ -20,6 +20,7 @@ export class NotifySubscribers {
     for (const subscription of subscriptions) {
       const notifier = this.notifiersByChannel.get(subscription.channel);
       if (!notifier) {
+        console.warn(`[notify] canal ${subscription.channel} sin configurar (faltan credenciales) — ${eventId}`);
         records.push(
           NotificationRecord.create({
             subscriptionId: subscription.id,
@@ -33,6 +34,12 @@ export class NotifySubscribers {
       }
 
       const result = await notifier.send(subscription, event);
+      if (result.status === NotificationStatus.FAILED) {
+        // NotificationRecord no guarda el motivo — sin este log se pierde.
+        console.warn(
+          `[notify] falló ${subscription.channel} → ${subscription.channelTarget} (${eventId}): ${result.errorMessage ?? "sin detalle"}`
+        );
+      }
       records.push(
         NotificationRecord.create({
           subscriptionId: subscription.id,

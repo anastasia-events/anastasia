@@ -7,7 +7,7 @@
  * plantilla real tiene otra forma, hay que ajustar WhatsAppNotifier).
  *
  * Uso: npx tsx scripts/validate-whatsapp-send.ts <numeroDestino>
- *   numeroDestino: con código de país, sin "+" (ej. 573147224936)
+ *   numeroDestino: con código de país, sin "+" (ej. 573001234567)
  */
 import { WhatsAppNotifier } from "../src/infrastructure/notifiers/whatsapp/WhatsAppNotifier";
 import { Subscription } from "../src/domain/entities/Subscription";
@@ -32,6 +32,7 @@ async function main() {
     accessToken: env.whatsapp.accessToken,
     templateName: env.whatsapp.templateName,
     apiVersion: env.whatsapp.apiVersion,
+    defaultCountryCode: env.whatsapp.defaultCountryCode,
   });
 
   const subscription = Subscription.create({

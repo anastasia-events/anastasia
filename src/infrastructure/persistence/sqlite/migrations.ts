@@ -133,6 +133,23 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 5,
+    description: "ids de Crowder con slug de página: crowder:<clave> → crowder:<página>/<clave>",
+    run: (db) => {
+      // Antes el id era solo la clave del ítem ("crowder:venta-general-02-10"),
+      // que choca entre páginas de eventos distintos. Hasta este cambio solo
+      // se vigiló una página (BTS), así que todo id viejo sin "/" es de ahí.
+      const legacyPage = "bts-world-tour-2026";
+      for (const table of ["event_state", "subscriptions"]) {
+        db.prepare(
+          `UPDATE ${table}
+           SET event_id = 'crowder:' || ? || '/' || substr(event_id, length('crowder:') + 1)
+           WHERE event_id LIKE 'crowder:%' AND instr(event_id, '/') = 0`
+        ).run(legacyPage);
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Database): void {

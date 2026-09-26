@@ -40,10 +40,38 @@ export function loadWatchedEventsConfig(filePath: string): WatchedEventsConfig {
   }
 
   const parsed = JSON.parse(raw);
-  return {
+  const config: WatchedEventsConfig = {
     ticketmaster: parsed.ticketmaster ?? [],
     crowder: parsed.crowder ?? [],
   };
+  validate(config, filePath);
+  return config;
+}
+
+// Falla al arrancar con un mensaje claro en vez de vigilar en silencio un
+// ítem mal cargado (ej. al agregar un evento nuevo a mano).
+function validate(config: WatchedEventsConfig, filePath: string): void {
+  const errors: string[] = [];
+
+  config.ticketmaster.forEach((item, i) => {
+    for (const field of ["id", "name", "venue"] as const) {
+      if (!item[field]) errors.push(`ticketmaster[${i}] sin "${field}"`);
+    }
+  });
+
+  const seenCrowder = new Set<string>();
+  config.crowder.forEach((item, i) => {
+    for (const field of ["id", "pageUrl", "name", "venue"] as const) {
+      if (!item[field]) errors.push(`crowder[${i}] sin "${field}"`);
+    }
+    const key = `${item.pageUrl}#${item.id}`;
+    if (seenCrowder.has(key)) errors.push(`crowder[${i}] repite id "${item.id}" en la misma página`);
+    seenCrowder.add(key);
+  });
+
+  if (errors.length > 0) {
+    throw new Error(`${filePath} tiene errores:\n  - ${errors.join("\n  - ")}`);
+  }
 }
 
 export function parseOptionalDate(value: string | undefined, context: string): Date | undefined {

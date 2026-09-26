@@ -27,7 +27,7 @@ describe("confirmTelegramSubscription", () => {
 
     // Usuario nuevo creado por la web al identificarse con el celular, antes
     // de tocar Start en el bot.
-    const phoneUser = User.create({ phone: "3147224936" });
+    const phoneUser = User.create({ phone: "3001234567" });
     await userRepository.save(phoneUser);
 
     const pendingTelegramLinks = new PendingTelegramLinkStore();
@@ -70,7 +70,7 @@ describe("confirmTelegramSubscription", () => {
     // Y ese usuario legacy queda fusionado: ahora tiene el teléfono también,
     // así que buscarlo por phone lo encuentra — antes del fix quedaba
     // invisible para "Suscrito a".
-    const mergedByPhone = await userRepository.findByPhone("3147224936");
+    const mergedByPhone = await userRepository.findByPhone("3001234567");
     expect(mergedByPhone?.id).toBe(legacyUser.id);
     expect(mergedByPhone?.telegramChatId).toBe(chatId);
   });

@@ -24,6 +24,32 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+export class PhoneNotAllowedError extends Error {
+  constructor() {
+    super("Este número no está habilitado para usar la app todavía.");
+  }
+}
+
+// Valida el celular en el server (formato + lista de permitidos) y devuelve
+// su forma normalizada, que es la que se guarda como sesión.
+export async function startSession(phone: string): Promise<string> {
+  const res = await fetch("/api/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
+  if (res.status === 403) throw new PhoneNotAllowedError();
+  if (!res.ok) throw new Error("Revisá el número e intentá de nuevo.");
+  const body = await res.json();
+  return body.phone;
+}
+
+export async function fetchEnabledChannels(): Promise<Channel[]> {
+  const res = await fetch("/api/channels");
+  if (!res.ok) throw new Error("No se pudieron cargar los canales");
+  return res.json();
+}
+
 export async function fetchEvents(): Promise<WatchedEvent[]> {
   const res = await fetch("/api/events");
   if (!res.ok) throw new Error("No se pudieron cargar los eventos");
@@ -66,6 +92,7 @@ export async function fetchSubscriptions(phone: string): Promise<SubscribedEvent
 // donde haga falta pedirlo de nuevo, en vez de tipearlo cada vez.
 export async function fetchAccountEmail(phone: string): Promise<string | null> {
   const res = await fetch(`/api/users/me?phone=${encodeURIComponent(phone)}`);
+  if (res.status === 403) throw new PhoneNotAllowedError();
   if (!res.ok) throw new Error("No se pudo cargar la cuenta");
   const body = await res.json();
   return body.email ?? null;

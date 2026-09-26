@@ -2,10 +2,12 @@ import { Event } from "../../../domain/entities/Event";
 import { Subscription } from "../../../domain/entities/Subscription";
 import { NotificationStatus } from "../../../domain/value-objects/NotificationStatus";
 import { NotificationPort, NotificationResult } from "../../../application/ports/out/NotificationPort";
+import { statusLabel } from "../statusLabel";
 
-export interface SendGridConfig {
+export interface BrevoConfig {
   apiKey: string;
-  fromEmail: string;
+  senderEmail: string;
+  senderName: string;
 }
 
 function buildSubject(event: Event): string {
@@ -13,26 +15,27 @@ function buildSubject(event: Event): string {
 }
 
 function buildBody(event: Event): string {
-  return `Estado: ${event.status}\nRecinto: ${event.venue}`;
+  return `Estado: ${statusLabel(event.status)}\nRecinto: ${event.venue}`;
 }
 
-/** Pega directo a la API REST de SendGrid (sin sumar @sendgrid/mail como dependencia). */
-export class SendGridEmailNotifier implements NotificationPort {
-  constructor(private readonly config: SendGridConfig) {}
+/** Pega directo a la API transaccional de Brevo (sin sumar su SDK como dependencia). */
+export class BrevoEmailNotifier implements NotificationPort {
+  constructor(private readonly config: BrevoConfig) {}
 
   async send(subscription: Subscription, event: Event): Promise<NotificationResult> {
     try {
-      const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
+          "api-key": this.config.apiKey,
           "Content-Type": "application/json",
+          accept: "application/json",
         },
         body: JSON.stringify({
-          personalizations: [{ to: [{ email: subscription.channelTarget }] }],
-          from: { email: this.config.fromEmail },
+          sender: { email: this.config.senderEmail, name: this.config.senderName },
+          to: [{ email: subscription.channelTarget }],
           subject: buildSubject(event),
-          content: [{ type: "text/plain", value: buildBody(event) }],
+          textContent: buildBody(event),
         }),
       });
 
@@ -40,7 +43,7 @@ export class SendGridEmailNotifier implements NotificationPort {
         const body = await response.text();
         return {
           status: NotificationStatus.FAILED,
-          errorMessage: `SendGrid API ${response.status}: ${body}`,
+          errorMessage: `Brevo API ${response.status}: ${body}`,
         };
       }
 

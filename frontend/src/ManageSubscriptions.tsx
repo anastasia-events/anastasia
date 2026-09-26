@@ -6,10 +6,12 @@ import {
   createTelegramSubscription,
   createWhatsappSubscription,
   fetchSubscriptions,
+  startSession,
   type Channel,
   type SubscribedEvent,
 } from "./api";
 import { usePhoneSession } from "./PhoneSession";
+import { useEnabledChannels } from "./useEnabledChannels";
 
 const CHANNELS: { channel: Channel; label: string; icon: LucideIcon }[] = [
   { channel: "WHATSAPP", label: "WhatsApp", icon: MessageCircle },
@@ -30,6 +32,7 @@ function ManageSubscriptions({ onBack }: ManageSubscriptionsProps) {
     logout,
   } = usePhoneSession();
   const [phoneInput, setPhoneInput] = useState("");
+  const enabledChannels = useEnabledChannels();
   const [identified, setIdentified] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,9 +72,17 @@ function ManageSubscriptions({ onBack }: ManageSubscriptionsProps) {
     return () => window.removeEventListener("focus", handleFocus);
   }, [sessionPhone, refresh]);
 
-  function handleIdentify() {
+  async function handleIdentify() {
     if (!phoneInput.trim()) return;
-    setSessionPhone(phoneInput.trim());
+    setLoading(true);
+    setError(null);
+    try {
+      setSessionPhone(await startSession(phoneInput.trim()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo validar el número.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleLogout() {
@@ -170,6 +181,12 @@ function ManageSubscriptions({ onBack }: ManageSubscriptionsProps) {
     turnOn(row, channel);
   }
 
+  // Canal deshabilitado en el server: no se ofrece, salvo que el usuario ya
+  // tenga una suscripción ahí (para que al menos pueda cancelarla).
+  const visibleChannels = CHANNELS.filter(
+    ({ channel }) => enabledChannels.has(channel) || rows.some((row) => row.channels[channel])
+  );
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
       <div className="flex items-center justify-between">
@@ -204,7 +221,7 @@ function ManageSubscriptions({ onBack }: ManageSubscriptionsProps) {
           <input
             type="tel"
             className="mt-3 w-full rounded-xl border border-line bg-white px-4 py-2.5 text-heading outline-none focus:border-ink/40"
-            placeholder="Ej: 3147224936"
+            placeholder="Ej: 3001234567"
             value={phoneInput}
             onChange={(e) => setPhoneInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleIdentify()}
@@ -253,7 +270,7 @@ function ManageSubscriptions({ onBack }: ManageSubscriptionsProps) {
                 <th className="text-left text-xs font-medium uppercase tracking-widest text-body/70">
                   Evento
                 </th>
-                {CHANNELS.map(({ channel, label, icon: Icon }) => (
+                {visibleChannels.map(({ channel, label, icon: Icon }) => (
                   <th
                     key={channel}
                     className="px-2 text-xs font-medium uppercase tracking-widest text-body/70"
@@ -273,11 +290,11 @@ function ManageSubscriptions({ onBack }: ManageSubscriptionsProps) {
                     <p className="font-medium text-heading">{row.name}</p>
                     <p className="text-sm text-body">{row.venue}</p>
                   </td>
-                  {CHANNELS.map(({ channel }, index) => (
+                  {visibleChannels.map(({ channel }, index) => (
                     <td
                       key={channel}
                       className={`border border-l-0 border-line px-2 py-4 text-center ${
-                        index === CHANNELS.length - 1 ? "rounded-r-2xl border-r" : ""
+                        index === visibleChannels.length - 1 ? "rounded-r-2xl border-r" : ""
                       }`}
                     >
                       {emailPromptFor === row.id && channel === "EMAIL" ? (

@@ -16,12 +16,12 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { buildContainer } from "../src/config/container";
 import { CheckEventAvailability } from "../src/application/use-cases/CheckEventAvailability";
-import { CrowderEventProvider, CROWDER_ID_PREFIX } from "../src/infrastructure/event-providers/crowder/CrowderEventProvider";
+import { CrowderEventProvider, crowderEventId } from "../src/infrastructure/event-providers/crowder/CrowderEventProvider";
 import { CrowderPageClient } from "../src/infrastructure/event-providers/crowder/CrowderPageClient";
 import { EventStatus } from "../src/domain/value-objects/EventStatus";
 
 const PORT = 4321;
-const TARGET_ITEM_ID = `${CROWDER_ID_PREFIX}venta-general-02-10`;
+const TARGET_ITEM_ID = crowderEventId("bts-world-tour-2026", "venta-general-02-10");
 
 async function main() {
   const fixtureHtml = readFileSync(
@@ -36,7 +36,7 @@ async function main() {
   await new Promise<void>((resolve) => server.listen(PORT, resolve));
   console.log(`[test] fixture servido en http://localhost:${PORT}/`);
 
-  const { db, eventStateRepository, notifySubscribers } = buildContainer();
+  const { db, eventStateRepository, notifySubscribers } = buildContainer({ telegramPolling: false });
 
   try {
     await eventStateRepository.saveStatus(TARGET_ITEM_ID, EventStatus.OFFSALE);

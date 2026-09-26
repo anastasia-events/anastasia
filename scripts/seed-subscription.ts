@@ -8,7 +8,8 @@
  *
  * Uso: npx tsx scripts/seed-subscription.ts <chatId> [eventIds]
  *   eventIds: opcional, coma-separado (usar el `id` tal como aparece en
- *   watched-events.json, con el prefijo "crowder:" para ítems de Crowder).
+ *   watched-events.json, ej. "crowder:bts-world-tour-2026/venta-general-02-10" para Crowder —
+ *   `npx tsx scripts/simulate-notification.ts` sin argumentos los lista).
  *   Si no se pasa, suscribe a TODOS los eventos de watched-events.json.
  */
 import { randomUUID } from "crypto";
@@ -25,7 +26,7 @@ async function main() {
     ? process.argv[3].split(",").map((id) => id.trim()).filter((id) => id.length > 0)
     : null;
 
-  const { watchedEvents, db, userRepository } = buildContainer();
+  const { watchedEvents, db, userRepository } = buildContainer({ telegramPolling: false });
 
   // El usuario "nace" por teléfono en el flujo real (ver FindOrCreateUserByPhone),
   // pero este script solo tiene un chatId de prueba a mano — arma un usuario

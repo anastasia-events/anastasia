@@ -7,11 +7,15 @@ import { SubscribeUserToEvent } from "../application/use-cases/SubscribeUserToEv
 import { UnsubscribeUser } from "../application/use-cases/UnsubscribeUser";
 import { NotificationChannel } from "../domain/value-objects/NotificationChannel";
 import { NotificationPort } from "../application/ports/out/NotificationPort";
-import { CrowderEventProvider, CROWDER_ID_PREFIX } from "../infrastructure/event-providers/crowder/CrowderEventProvider";
+import {
+  CrowderEventProvider,
+  crowderEventId,
+  crowderPageSlug,
+} from "../infrastructure/event-providers/crowder/CrowderEventProvider";
 import { CrowderPageClient } from "../infrastructure/event-providers/crowder/CrowderPageClient";
 import { TicketmasterApiClient } from "../infrastructure/event-providers/ticketmaster/TicketmasterApiClient";
 import { TicketmasterEventProvider } from "../infrastructure/event-providers/ticketmaster/TicketmasterEventProvider";
-import { SendGridEmailNotifier } from "../infrastructure/notifiers/sendgrid/SendGridEmailNotifier";
+import { BrevoEmailNotifier } from "../infrastructure/notifiers/brevo/BrevoEmailNotifier";
 import { TelegramNotifier } from "../infrastructure/notifiers/telegram/TelegramNotifier";
 import { TwilioCallNotifier } from "../infrastructure/notifiers/twilio/TwilioCallNotifier";
 import { WhatsAppNotifier } from "../infrastructure/notifiers/whatsapp/WhatsAppNotifier";
@@ -22,10 +26,18 @@ import { SqliteUserRepository } from "../infrastructure/persistence/sqlite/Sqlit
 import { PollingScheduler, WatchedEvent } from "../infrastructure/scheduler/PollingScheduler";
 import { PendingTelegramLinkStore } from "../infrastructure/telegram/PendingTelegramLinkStore";
 import { buildHttpServer, confirmTelegramSubscription, WatchedEventEntry } from "../infrastructure/http/server";
+import { parseAllowedPhones } from "../infrastructure/http/phone";
 import { loadWatchedEventsConfig, parseOptionalDate } from "./watchedEventsConfig";
 import { env } from "./env";
 
-export function buildContainer() {
+export interface ContainerOptions {
+  // Los scripts (scripts/) solo necesitan ENVIAR por Telegram: con polling
+  // apagado no le disputan los updates del bot al servidor que esté corriendo
+  // (Telegram permite un solo consumidor de getUpdates por token).
+  telegramPolling?: boolean;
+}
+
+export function buildContainer(options: ContainerOptions = {}) {
   const db = openDatabase(env.databasePath);
   const watchedEventsConfig = loadWatchedEventsConfig(env.watchedEventsFile);
 
@@ -34,7 +46,7 @@ export function buildContainer() {
 
   // polling: true porque además de enviar notificaciones, el bot escucha
   // /start <token> para confirmar las suscripciones iniciadas desde la web.
-  const telegramBot = new TelegramBot(env.telegramBotToken, { polling: true });
+  const telegramBot = new TelegramBot(env.telegramBotToken, { polling: options.telegramPolling ?? true });
   const notifiersByChannel = new Map<NotificationChannel, NotificationPort>([
     [NotificationChannel.TELEGRAM, new TelegramNotifier(telegramBot)],
     [NotificationChannel.CALL, new TwilioCallNotifier()],
@@ -50,13 +62,18 @@ export function buildContainer() {
         accessToken: env.whatsapp.accessToken,
         templateName: env.whatsapp.templateName,
         apiVersion: env.whatsapp.apiVersion,
+        defaultCountryCode: env.whatsapp.defaultCountryCode,
       })
     );
   }
-  if (env.sendgrid.apiKey && env.sendgrid.fromEmail) {
+  if (env.brevo.apiKey && env.brevo.senderEmail) {
     notifiersByChannel.set(
       NotificationChannel.EMAIL,
-      new SendGridEmailNotifier({ apiKey: env.sendgrid.apiKey, fromEmail: env.sendgrid.fromEmail })
+      new BrevoEmailNotifier({
+        apiKey: env.brevo.apiKey,
+        senderEmail: env.brevo.senderEmail,
+        senderName: env.brevo.senderName,
+      })
     );
   }
 
@@ -112,7 +129,11 @@ export function buildContainer() {
       pageUrl,
       cacheTtlMs: env.crowder.pageCacheTtlSeconds * 1000,
     });
-    const crowderProvider = new CrowderEventProvider(crowderClient);
+    const pageSlug = crowderPageSlug(pageUrl);
+    const crowderProvider = new CrowderEventProvider(
+      crowderClient,
+      new Map(items.map((item) => [item.id, { name: item.name, venue: item.venue }]))
+    );
     const checkCrowderAvailability = new CheckEventAvailability(
       crowderProvider,
       eventStateRepository,
@@ -121,9 +142,9 @@ export function buildContainer() {
     const subscribeUserToEventCrowder = new SubscribeUserToEvent(crowderProvider, subscriptionRepository);
 
     const crowderWatched: WatchedEvent[] = items.map((item) => ({
-      id: `${CROWDER_ID_PREFIX}${item.id}`,
-      activeFrom: parseOptionalDate(item.activeFrom, `watched-events.json (crowder:${item.id})`),
-      activeUntil: parseOptionalDate(item.activeUntil, `watched-events.json (crowder:${item.id})`),
+      id: crowderEventId(pageSlug, item.id),
+      activeFrom: parseOptionalDate(item.activeFrom, `watched-events.json (${crowderEventId(pageSlug, item.id)})`),
+      activeUntil: parseOptionalDate(item.activeUntil, `watched-events.json (${crowderEventId(pageSlug, item.id)})`),
     }));
     schedulers.push(
       new PollingScheduler(crowderWatched, env.crowder.pollingIntervalSeconds, checkCrowderAvailability)
@@ -131,7 +152,7 @@ export function buildContainer() {
 
     for (const item of items) {
       watchedEvents.push({
-        id: `${CROWDER_ID_PREFIX}${item.id}`,
+        id: crowderEventId(pageSlug, item.id),
         name: item.name,
         venue: item.venue,
         provider: crowderProvider,
@@ -250,6 +271,12 @@ export function buildContainer() {
     telegramBotUsername: env.telegramBotUsername,
     frontendOrigin: env.frontendOrigin,
     staticDir: env.staticDir,
+    allowedPhones: parseAllowedPhones(env.allowedPhones),
+    enabledChannels: new Set(notifiersByChannel.keys()),
+    whatsappWebhook:
+      env.whatsapp.webhookVerifyToken && env.whatsapp.appSecret
+        ? { verifyToken: env.whatsapp.webhookVerifyToken, appSecret: env.whatsapp.appSecret }
+        : undefined,
   });
 
   return {
@@ -264,5 +291,6 @@ export function buildContainer() {
     notifySubscribers,
     findOrCreateUser,
     userRepository,
+    subscriptionRepository,
   };
 }

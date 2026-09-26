@@ -4,10 +4,12 @@ import {
   createEmailSubscription,
   createTelegramSubscription,
   createWhatsappSubscription,
+  startSession,
   type Channel,
   type WatchedEvent,
 } from "./api";
 import { usePhoneSession } from "./PhoneSession";
+import { useEnabledChannels } from "./useEnabledChannels";
 
 const CHANNEL_OPTIONS: { channel: Channel; label: string; icon: ComponentType<{ size?: number }> }[] = [
   { channel: "WHATSAPP", label: "WhatsApp", icon: MessageCircle },
@@ -36,6 +38,7 @@ function SubscribeModal({ event, onClose }: SubscribeModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
+  const enabledChannels = useEnabledChannels();
 
   // El email de cuenta puede llegar un momento después (se trae en cuanto se
   // conoce el teléfono) — si todavía no escribiste nada, se prellena solo.
@@ -52,10 +55,20 @@ function SubscribeModal({ event, onClose }: SubscribeModalProps) {
     });
   }
 
-  function handleConfirmPhone() {
+  async function handleConfirmPhone() {
     if (!phone.trim()) return;
-    setSessionPhone(phone.trim());
-    setStep("channels");
+    setSubmitting(true);
+    setError(null);
+    try {
+      const normalized = await startSession(phone.trim());
+      setPhone(normalized);
+      setSessionPhone(normalized);
+      setStep("channels");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo validar el número.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleConfirmChannels() {
@@ -125,7 +138,7 @@ function SubscribeModal({ event, onClose }: SubscribeModalProps) {
             <input
               type="tel"
               className="mt-3 w-full rounded-xl border border-line bg-white px-4 py-2.5 text-heading outline-none focus:border-ink/40"
-              placeholder="Ej: 3147224936"
+              placeholder="Ej: 3001234567"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleConfirmPhone()}
@@ -134,11 +147,12 @@ function SubscribeModal({ event, onClose }: SubscribeModalProps) {
             <button
               type="button"
               onClick={handleConfirmPhone}
-              disabled={!phone.trim()}
+              disabled={submitting || !phone.trim()}
               className="mt-4 w-full rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-paper transition hover:bg-ink-soft disabled:opacity-40"
             >
-              Continuar
+              {submitting ? "Validando..." : "Continuar"}
             </button>
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
           </>
         )}
 
@@ -148,7 +162,7 @@ function SubscribeModal({ event, onClose }: SubscribeModalProps) {
               ¿Por dónde? Podés elegir varias
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {CHANNEL_OPTIONS.map(({ channel, label, icon: Icon }) => {
+              {CHANNEL_OPTIONS.filter(({ channel }) => enabledChannels.has(channel)).map(({ channel, label, icon: Icon }) => {
                 const isSelected = selected.has(channel);
                 return (
                   <button

@@ -5,6 +5,14 @@ import ManageSubscriptions from "./ManageSubscriptions";
 import { usePhoneSession } from "./PhoneSession";
 import SubscribeModal from "./SubscribeModal";
 
+type EventFilter = "all" | "subscribed" | "unsubscribed";
+
+const FILTER_OPTIONS: { value: EventFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "subscribed", label: "Mis inscritos" },
+  { value: "unsubscribed", label: "Sin inscribir" },
+];
+
 function App() {
   const { phone: sessionPhone, logout } = usePhoneSession();
   const [view, setView] = useState<"events" | "manage">("events");
@@ -15,7 +23,7 @@ function App() {
     null,
   );
   const [subscribedIds, setSubscribedIds] = useState<Set<string>>(new Set());
-  const [onlySubscribed, setOnlySubscribed] = useState(false);
+  const [filter, setFilter] = useState<EventFilter>("all");
 
   useEffect(() => {
     fetchEvents()
@@ -39,7 +47,7 @@ function App() {
   useEffect(() => {
     if (!sessionPhone) {
       setSubscribedIds(new Set());
-      setOnlySubscribed(false);
+      setFilter("all");
       return;
     }
     refreshSubscribedIds(sessionPhone);
@@ -56,9 +64,11 @@ function App() {
     return <ManageSubscriptions onBack={handleBackFromManage} />;
   }
 
-  const visibleEvents = onlySubscribed
-    ? events.filter((event) => subscribedIds.has(event.id))
-    : events;
+  const visibleEvents = events.filter((event) => {
+    if (filter === "subscribed") return subscribedIds.has(event.id);
+    if (filter === "unsubscribed") return !subscribedIds.has(event.id);
+    return true;
+  });
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-6 sm:py-10">
@@ -85,7 +95,7 @@ function App() {
         </div>
 
         <h1 className="max-w-md text-5xl font-bold tracking-tight sm:text-6xl">
-          Alertas de eventos
+          Anastasia
         </h1>
         <p className="mt-4 max-w-sm text-white/60">
           Elegí un evento y suscribite para enterarte apenas se abra la venta.
@@ -98,19 +108,29 @@ function App() {
             Eventos vigilados
           </p>
 
-          {sessionPhone && subscribedIds.size > 0 && (
-            <button
-              type="button"
-              onClick={() => setOnlySubscribed((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                onlySubscribed
-                  ? "border-ink bg-ink text-paper"
-                  : "border-line bg-white text-body hover:border-ink/30"
-              }`}
+          {sessionPhone && (
+            <div
+              role="radiogroup"
+              aria-label="Filtrar eventos"
+              className="inline-flex rounded-full border border-line bg-white p-0.5"
             >
-              <Check size={13} />
-              Solo mis inscritos
-            </button>
+              {FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={filter === option.value}
+                  onClick={() => setFilter(option.value)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                    filter === option.value
+                      ? "bg-ink text-paper"
+                      : "text-body hover:text-heading"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -159,9 +179,11 @@ function App() {
 
         {!loading && visibleEvents.length === 0 && !error && (
           <p className="mt-4 text-sm">
-            {onlySubscribed
+            {filter === "subscribed"
               ? "No estás inscripto a ningún evento todavía."
-              : "No hay eventos vigilados por el momento."}
+              : filter === "unsubscribed"
+                ? "Ya estás inscripto a todos los eventos vigilados."
+                : "No hay eventos vigilados por el momento."}
           </p>
         )}
       </div>

@@ -76,7 +76,7 @@ describe("POST /api/subscriptions/telegram", () => {
     const res = await fetch(`${baseUrl}/api/subscriptions/telegram`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: "crowder:x", phone: "3147224936" }),
+      body: JSON.stringify({ eventId: "crowder:x", phone: "3001234567" }),
     });
     const body = await res.json();
 
@@ -87,13 +87,13 @@ describe("POST /api/subscriptions/telegram", () => {
   });
 
   it("suscribe directo (sin token) cuando el usuario ya tiene el chat linkeado", async () => {
-    const linkedUser = User.create({ phone: "3147224936" }).withTelegramChatId("555");
+    const linkedUser = User.create({ phone: "3001234567" }).withTelegramChatId("555");
     await userRepository.save(linkedUser);
 
     const res = await fetch(`${baseUrl}/api/subscriptions/telegram`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: "crowder:x", phone: "3147224936" }),
+      body: JSON.stringify({ eventId: "crowder:x", phone: "3001234567" }),
     });
     const body = await res.json();
 
@@ -113,10 +113,10 @@ describe("POST /api/subscriptions/email + GET /api/users/me", () => {
     await fetch(`${baseUrl}/api/subscriptions/email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: "crowder:x", phone: "3147224936", email: "a@b.com" }),
+      body: JSON.stringify({ eventId: "crowder:x", phone: "3001234567", email: "a@b.com" }),
     });
 
-    const res = await fetch(`${baseUrl}/api/users/me?phone=3147224936`);
+    const res = await fetch(`${baseUrl}/api/users/me?phone=3001234567`);
     const body = await res.json();
 
     expect(body.email).toBe("a@b.com");
@@ -127,10 +127,10 @@ describe("POST /api/subscriptions/email + GET /api/users/me", () => {
     await fetch(`${baseUrl}/api/subscriptions/email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: "crowder:x", phone: "3147224936", email: "viejo@ejemplo.com" }),
+      body: JSON.stringify({ eventId: "crowder:x", phone: "3001234567", email: "viejo@ejemplo.com" }),
     });
 
-    const user = await userRepository.findByPhone("3147224936");
+    const user = await userRepository.findByPhone("3001234567");
     const activeBefore = await subscriptionRepository.findActiveByUserId(user!.id);
     expect(activeBefore[0].channelTarget).toBe("viejo@ejemplo.com");
 
@@ -138,14 +138,14 @@ describe("POST /api/subscriptions/email + GET /api/users/me", () => {
     await fetch(`${baseUrl}/api/subscriptions/email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: "crowder:x", phone: "3147224936", email: "nuevo@ejemplo.com" }),
+      body: JSON.stringify({ eventId: "crowder:x", phone: "3001234567", email: "nuevo@ejemplo.com" }),
     });
 
     const activeAfter = await subscriptionRepository.findActiveByUserId(user!.id);
     expect(activeAfter).toHaveLength(1);
     expect(activeAfter[0].channelTarget).toBe("nuevo@ejemplo.com");
 
-    const meRes = await fetch(`${baseUrl}/api/users/me?phone=3147224936`);
+    const meRes = await fetch(`${baseUrl}/api/users/me?phone=3001234567`);
     expect((await meRes.json()).email).toBe("nuevo@ejemplo.com");
   });
 
