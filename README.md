@@ -4,7 +4,7 @@ Vigila eventos de venta de boletas (Ticketmaster y páginas de Ticketmaster.co s
 
 - **Backend:** Node.js 22 + TypeScript, Express, SQLite (`better-sqlite3`), arquitectura hexagonal.
 - **Frontend:** React 19 + Vite + Tailwind v4, servido por el mismo proceso en producción.
-- **Deploy:** Fly.io, app `event-wa`, una sola máquina con volumen persistente.
+- **Deploy:** Fly.io, app `event-wa`, una sola máquina con volumen persistente. Se despliega automáticamente al mergear un PR en el repo central (GitHub Actions).
 
 ---
 
@@ -22,9 +22,10 @@ Vigila eventos de venta de boletas (Ticketmaster y páginas de Ticketmaster.co s
 10. [Desarrollo local](#desarrollo-local)
 11. [Scripts de soporte](#scripts-de-soporte)
 12. [Tests](#tests)
-13. [Deploy en Fly.io](#deploy-en-flyio)
-14. [Cómo extender el proyecto](#cómo-extender-el-proyecto)
-15. [Limitaciones conocidas y pendientes](#limitaciones-conocidas-y-pendientes)
+13. [Flujo de contribución y CI/CD](#flujo-de-contribución-y-cicd)
+14. [Deploy en Fly.io](#deploy-en-flyio)
+15. [Cómo extender el proyecto](#cómo-extender-el-proyecto)
+16. [Limitaciones conocidas y pendientes](#limitaciones-conocidas-y-pendientes)
 
 ---
 
@@ -135,6 +136,7 @@ flowchart LR
 ├── frontend/                      # SPA React (ver sección Frontend)
 ├── scripts/                       # Herramientas manuales (ver Scripts de soporte)
 ├── test/                          # Vitest: domain / application / infrastructure
+├── .github/workflows/             # ci.yml (checks de PR) y deploy.yml (deploy al mergear)
 ├── Dockerfile                     # Build multi-stage (frontend + backend + runtime)
 ├── fly.toml                       # Configuración de Fly.io
 └── PLAN-MVP-alertas-eventos.md    # Plan original del MVP
@@ -363,13 +365,15 @@ npm run dev                     # backend (tsx watch) en :3001
 npm --prefix frontend run dev   # frontend (Vite) en :5173
 ```
 
-> ⚠️ **Antes de `npm run dev`, apaga producción** para no competir por el bot de Telegram:
-> ```bash
-> fly machine stop d8944eef3e2308 -a event-wa
-> # ...al terminar, cierra el backend local y enciende producción de nuevo:
-> fly machine start d8944eef3e2308 -a event-wa
-> ```
-> Los scripts de `scripts/` **no** necesitan esto: arman el container con `telegramPolling: false`.
+### Bot de Telegram de desarrollo
+
+Usa en local **un bot propio**, nunca el de producción. Telegram permite un solo proceso haciendo polling por bot: si local y Fly comparten token, los dos reciben `409 Conflict` y se pierden confirmaciones.
+
+1. En @BotFather: `/newbot` → por ejemplo `anastasia_dev_bot`.
+2. En tu `.env` **local**: `TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_USERNAME` de ese bot. Fly sigue con el de producción.
+3. Toca **Start** una vez en el bot de desarrollo. Los `telegram_chat_id` que ya tengas en la base local siguen valiendo, porque en chats privados el id es el del usuario, pero un bot solo puede escribirle a quien lo inició.
+
+Al arrancar, el backend registra en el log qué bot usa (`[main] bot de Telegram: @...`); revísalo si algo no llega. Los scripts de `scripts/` no hacen polling (`telegramPolling: false`), así que pueden correr contra cualquier bot.
 
 | Comando | Acción |
 |---|---|
@@ -413,7 +417,43 @@ Los tests no hacen llamadas de red reales.
 
 ---
 
+## Flujo de contribución y CI/CD
+
+El repositorio **central** (el de la organización) es la fuente de verdad y lo único que despliega. Cada persona trabaja en su **fork**.
+
+```mermaid
+flowchart LR
+  A[Rama en tu fork] -->|PR| B[main del central]
+  B -. en el PR .-> C[ci: tsc + tests + build frontend]
+  C -->|verde + aprobación| D[Merge]
+  D --> E[deploy: mismos checks + flyctl deploy]
+  E --> F[event-wa.fly.dev]
+```
+
+| Workflow | Cuándo corre | Qué hace |
+|---|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | En cada PR hacia `main` | `tsc --noEmit`, `npm test` y build del frontend. No usa secretos. |
+| [`deploy.yml`](.github/workflows/deploy.yml) | Push a `main` del central (es decir, al mergear) o a mano desde *Actions* | Vuelve a correr `ci` y, si pasa, ejecuta `flyctl deploy --remote-only -a event-wa`. En los forks el job queda *skipped*. Nunca corren dos deploys a la vez. |
+
+**Día a día**
+```bash
+git switch -c feature/mi-cambio
+# ...cambios + npm test...
+git push origin feature/mi-cambio      # a tu fork
+# abrir el PR: tu-fork/feature/mi-cambio → central/main
+git fetch upstream && git merge upstream/main   # mantener tu main al día
+```
+
+**Configuración única del central** (Settings del repo de la organización):
+- *Secrets and variables → Actions*: `FLY_API_TOKEN` con el valor de `fly tokens create deploy -a event-wa`.
+- *Branches → regla para `main`*: exigir PR, exigir el check **`ci`** en verde y exigir aprobación. GitHub no deja aprobar un PR propio, así que hace falta al menos otro miembro con permisos de revisión.
+- *Environments → `production`* (opcional): se puede exigir una aprobación extra justo antes de cada deploy.
+
+---
+
 ## Deploy en Fly.io
+
+El deploy normal es **automático** al mergear en el central (ver arriba). Lo manual de esta sección queda para secretos y emergencias.
 
 - **App:** `event-wa`, región `gru` (São Paulo). URL: https://event-wa.fly.dev
 - **Imagen:** [`Dockerfile`](Dockerfile) multi-stage sobre `node:22-bookworm-slim`. No usa alpine porque `better-sqlite3` es un módulo nativo. Copia `config/` a la imagen.
@@ -426,7 +466,7 @@ fly secrets set TICKETMASTER_API_KEY=... TELEGRAM_BOT_TOKEN=... TELEGRAM_BOT_USE
 # Importar un grupo desde .env (PowerShell):
 Get-Content .env | Select-String '^(BREVO|WHATSAPP)_' | ForEach-Object { $_.Line } | fly secrets import -a event-wa
 
-fly deploy -a event-wa
+fly deploy -a event-wa          # solo en emergencias; lo normal es mergear un PR
 fly status -a event-wa          # si la máquina quedó "stopped": fly machine start <id> -a event-wa
 fly logs -a event-wa
 ```
@@ -440,7 +480,8 @@ fly logs -a event-wa
 |---|---|---|
 | **Meta / WhatsApp** | developers.facebook.com → app *NotificadorEventos* | Los mensajes que inicia el negocio requieren una **plantilla aprobada**. Con el número de prueba, cada destinatario tiene que estar en la lista de autorizados. Webhook: `https://event-wa.fly.dev/api/webhooks/whatsapp`, campo `messages`. |
 | **Brevo** | app.brevo.com | El remitente tiene que estar verificado. El bloqueo por IPs autorizadas debe estar **desactivado**, porque la IP de salida de Fly no es fija. |
-| **Telegram** | @BotFather | Un solo proceso puede hacer polling a la vez. |
+| **Telegram** | @BotFather | Un solo proceso puede hacer polling por bot: producción usa el suyo y cada desarrollador el propio. |
+| **GitHub Actions** | Repo central → Settings | Secreto `FLY_API_TOKEN` y protección de `main`. |
 
 ---
 

@@ -1,0 +1,38 @@
+# Checks de cada PR: type-check, tests y build del frontend. No usa secretos
+# (los tests no tocan red ni .env), así que corre igual en el central y en
+# los forks. En main no se dispara por push: deploy.yml lo reutiliza
+# (workflow_call) antes de desplegar, así no corre dos veces.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          npm ci
+          npm ci --prefix frontend
+
+      - name: Type-check backend
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+
+      - name: Build frontend (incluye type-check)
+        run: npm --prefix frontend run build

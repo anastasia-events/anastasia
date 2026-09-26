@@ -1,0 +1,43 @@
+# Deploy a producción (Fly.io, app event-wa) cada vez que algo entra a main
+# del repo central — o sea, al mergear un PR aprobado. También se puede
+# lanzar a mano desde la pestaña Actions (workflow_dispatch).
+#
+# Solo corre en el repo central: en los forks el job queda "skipped", así
+# nadie intenta desplegar sin el secreto FLY_API_TOKEN.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Nunca dos deploys a la vez; si se mergean dos PRs seguidos, el segundo
+# espera a que termine el primero en vez de cancelarlo a mitad de camino.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: ${{ !github.event.repository.fork }}
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: checks
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy a Fly.io
+        run: flyctl deploy --remote-only -a event-wa
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Estado de la máquina
+        run: flyctl status -a event-wa
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
