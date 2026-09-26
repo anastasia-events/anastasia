@@ -19,6 +19,9 @@ function main(): void {
   console.log(
     `[main] event-watcher arrancado. Vigilando ${watchedEvents.length} evento(s) (ver ${env.watchedEventsFile}).`
   );
+  // En local conviene un bot propio: dos procesos haciendo polling al mismo
+  // bot (ej. local + producción) se pisan con 409 Conflict.
+  console.log(`[main] bot de Telegram: @${env.telegramBotUsername}`);
 
   const shutdown = () => {
     console.log("[main] apagando...");
