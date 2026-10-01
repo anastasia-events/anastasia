@@ -19,6 +19,7 @@ import { BrevoEmailNotifier } from "../infrastructure/notifiers/brevo/BrevoEmail
 import { TelegramNotifier } from "../infrastructure/notifiers/telegram/TelegramNotifier";
 import { TwilioCallNotifier } from "../infrastructure/notifiers/twilio/TwilioCallNotifier";
 import { WhatsAppNotifier } from "../infrastructure/notifiers/whatsapp/WhatsAppNotifier";
+import { FileLogger } from "../infrastructure/logging/FileLogger";
 import { openDatabase } from "../infrastructure/persistence/sqlite/Database";
 import { SqliteEventStateRepository } from "../infrastructure/persistence/sqlite/SqliteEventStateRepository";
 import { SqliteSubscriptionRepository } from "../infrastructure/persistence/sqlite/SqliteSubscriptionRepository";
@@ -40,6 +41,7 @@ export interface ContainerOptions {
 export function buildContainer(options: ContainerOptions = {}) {
   const db = openDatabase(env.databasePath);
   const watchedEventsConfig = loadWatchedEventsConfig(env.watchedEventsFile);
+  const schedulerLog = new FileLogger(env.schedulerLogFile).log;
 
   const ticketmasterClient = new TicketmasterApiClient(env.ticketmasterApiKey, env.ticketmaster);
   const eventProvider = new TicketmasterEventProvider(ticketmasterClient);
@@ -61,6 +63,7 @@ export function buildContainer(options: ContainerOptions = {}) {
         phoneNumberId: env.whatsapp.phoneNumberId,
         accessToken: env.whatsapp.accessToken,
         templateName: env.whatsapp.templateName,
+        templateLanguage: env.whatsapp.templateLanguage,
         apiVersion: env.whatsapp.apiVersion,
         defaultCountryCode: env.whatsapp.defaultCountryCode,
       })
@@ -101,7 +104,12 @@ export function buildContainer(options: ContainerOptions = {}) {
       activeFrom: parseOptionalDate(item.activeFrom, `watched-events.json (ticketmaster:${item.id})`),
       activeUntil: parseOptionalDate(item.activeUntil, `watched-events.json (ticketmaster:${item.id})`),
     }));
-    schedulers.push(new PollingScheduler(ticketmasterWatched, env.pollingIntervalSeconds, checkEventAvailability));
+    schedulers.push(
+      new PollingScheduler(ticketmasterWatched, env.pollingIntervalSeconds, checkEventAvailability, {
+        name: "ticketmaster",
+        log: schedulerLog,
+      })
+    );
 
     for (const item of watchedEventsConfig.ticketmaster) {
       watchedEvents.push({
@@ -128,6 +136,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     const crowderClient = new CrowderPageClient({
       pageUrl,
       cacheTtlMs: env.crowder.pageCacheTtlSeconds * 1000,
+      log: schedulerLog,
     });
     const pageSlug = crowderPageSlug(pageUrl);
     const crowderProvider = new CrowderEventProvider(
@@ -147,7 +156,10 @@ export function buildContainer(options: ContainerOptions = {}) {
       activeUntil: parseOptionalDate(item.activeUntil, `watched-events.json (${crowderEventId(pageSlug, item.id)})`),
     }));
     schedulers.push(
-      new PollingScheduler(crowderWatched, env.crowder.pollingIntervalSeconds, checkCrowderAvailability)
+      new PollingScheduler(crowderWatched, env.crowder.pollingIntervalSeconds, checkCrowderAvailability, {
+        name: `crowder:${pageSlug}`,
+        log: schedulerLog,
+      })
     );
 
     for (const item of items) {
@@ -163,7 +175,8 @@ export function buildContainer(options: ContainerOptions = {}) {
 
   const pendingTelegramLinks = new PendingTelegramLinkStore();
 
-  const misuscripcionesHint = "Usá /misuscripciones cuando quieras ver o cancelar tus suscripciones por acá.";
+  const misuscripcionesHint =
+    "Usá /misuscripciones cuando quieras ver o cancelar tus suscripciones por acá, o /unsuscribe para cancelarlas todas.";
 
   // /start sin token (alguien abre el bot directo, sin venir de un deep link
   // de la web) — explica para qué sirve el bot y el comando de gestión.
@@ -234,6 +247,37 @@ export function buildContainer(options: ContainerOptions = {}) {
     });
   });
 
+  // /unsuscribe cancela TODAS las suscripciones de Telegram del chat (mismo
+  // filtro por canal que /misuscripciones: WhatsApp/Email no se tocan) y
+  // desvincula el chatId del usuario, para que volver a suscribirse por
+  // Telegram exija pasar otra vez por el deep link /start <token>.
+  telegramBot.onText(/^\/(unsuscribe|unsubscribe)$/, async (msg) => {
+    const chatId = String(msg.chat.id);
+    const user = await userRepository.findByTelegramChatId(chatId);
+    if (!user) {
+      await telegramBot.sendMessage(chatId, "No tenés suscripciones activas por Telegram.");
+      return;
+    }
+
+    const allSubscriptions = await listUserSubscriptions.execute(user.id);
+    const subscriptions = allSubscriptions.filter(
+      (subscription) => subscription.channel === NotificationChannel.TELEGRAM
+    );
+    for (const subscription of subscriptions) {
+      await unsubscribeUser.execute(subscription.id, user.id);
+    }
+    await userRepository.unlinkTelegramChatId(user.id);
+
+    const summary =
+      subscriptions.length === 0
+        ? "No tenías suscripciones activas por Telegram, pero desvinculamos este chat."
+        : `Cancelamos ${subscriptions.length} ${subscriptions.length === 1 ? "suscripción" : "suscripciones"} por Telegram y desvinculamos este chat.`;
+    await telegramBot.sendMessage(
+      chatId,
+      `✅ ${summary} Ya no vas a recibir avisos por acá. Para volver a suscribirte, hacelo desde la web.`
+    );
+  });
+
   telegramBot.on("callback_query", async (query) => {
     const data = query.data;
     const chatId = query.message ? String(query.message.chat.id) : undefined;
@@ -272,6 +316,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     frontendOrigin: env.frontendOrigin,
     staticDir: env.staticDir,
     allowedPhones: parseAllowedPhones(env.allowedPhones),
+    whatsappPhones: parseAllowedPhones(env.whatsapp.testNumbers),
     enabledChannels: new Set(notifiersByChannel.keys()),
     whatsappWebhook:
       env.whatsapp.webhookVerifyToken && env.whatsapp.appSecret

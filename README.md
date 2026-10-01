@@ -237,10 +237,10 @@ Todas las rutas que reciben `phone` lo normalizan y aplican `ALLOWED_PHONES`. Un
 | Método | Ruta | Body / Query | Respuesta |
 |---|---|---|---|
 | `GET` | `/api/events` | — | Lista de `watched-events.json` (`id`, `name`, `venue`). **No consulta a los proveedores.** |
-| `GET` | `/api/channels` | — | Canales habilitados, por ejemplo `["TELEGRAM","EMAIL"]`. |
+| `GET` | `/api/channels?phone=` | `phone` opcional | Canales habilitados, por ejemplo `["TELEGRAM","EMAIL"]`. Si `TEST_WAPP_NUMBERS` tiene valores, `WHATSAPP` solo aparece para esos celulares. |
 | `POST` | `/api/session` | `{ phone }` | `{ phone }` normalizado, o `403`. |
 | `POST` | `/api/subscriptions/telegram` | `{ eventId, phone }` | `{ linked: true, subscriptionId }` o `{ linked: false, token, deepLink }` |
-| `POST` | `/api/subscriptions/whatsapp` | `{ eventId, phone }` | `{ subscriptionId }`, o `503 channel_disabled` si el canal está deshabilitado. |
+| `POST` | `/api/subscriptions/whatsapp` | `{ eventId, phone }` | `{ subscriptionId }`, `503 channel_disabled` si el canal está deshabilitado, o `403 whatsapp_not_allowed` si el celular no está en `TEST_WAPP_NUMBERS`. |
 | `POST` | `/api/subscriptions/email` | `{ eventId, phone, email }` | `{ subscriptionId, email }`. Si cambia el email, se actualiza en todas las suscripciones EMAIL del usuario. |
 | `GET` | `/api/subscriptions?phone=` | — | Matriz agrupada por evento: `{ id, name, venue, channels: { CANAL: subscriptionId } }[]` |
 | `DELETE` | `/api/subscriptions/:id?phone=` | — | `204`, o `404`/`403` si no existe o no es del usuario. |
@@ -261,6 +261,7 @@ Bot: `@<TELEGRAM_BOT_USERNAME>`, con `polling: true`.
 | `/start` | Mensaje de bienvenida. |
 | `/start <token>` | Confirma una suscripción iniciada desde la web y vincula el chat al usuario. |
 | `/misuscripciones` | Lista las suscripciones **de Telegram** del chat, con un botón para cancelar cada una. |
+| `/unsuscribe` | Cancela **todas** las suscripciones de Telegram del chat y desvincula el chat del usuario (para volver a suscribirse hay que pasar otra vez por `/start <token>` desde la web). |
 
 > ⚠️ Telegram permite **un solo consumidor** de `getUpdates` por token. Si el backend local y producción corren a la vez, aparecen errores `409 Conflict` y se pierden confirmaciones. Ver [Desarrollo local](#desarrollo-local).
 
@@ -293,6 +294,8 @@ Copia [`.env.example`](.env.example) a `.env`. En Fly.io, las variables no secre
 | `WHATSAPP_PHONE_NUMBER_ID` | ⚪ | — | Id del número emisor en Meta. |
 | `WHATSAPP_ACCESS_TOKEN` | ⚪ | — | Token **permanente** de Usuario del sistema. |
 | `WHATSAPP_TEMPLATE_NAME` | ⚪ | — | Plantilla aprobada (es, 3 variables: evento, recinto, estado). |
+| `TEST_WAPP_NUMBERS` | | vacío | Celulares que pueden activar WhatsApp, separados por coma. Con el número de prueba de Meta, deben ser sus destinatarios autorizados. Vacío = cualquiera. |
+| `WHATSAPP_TEMPLATE_LANGUAGE` | | `es` | Idioma exacto de la plantilla aprobada (`es`, `es_CO`, `es_ES`…). Si no coincide, Meta responde `#132001`. |
 | `WHATSAPP_API_VERSION` | | `v20.0` | Versión de la Graph API. |
 | `WHATSAPP_DEFAULT_COUNTRY_CODE` | | `57` | Se antepone a celulares locales de 10 dígitos. |
 | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | ⚪ | — | String propio para el handshake del webhook. |
@@ -509,7 +512,7 @@ No hace falta tocar el dominio ni el esquema de la base.
 
 ## Limitaciones conocidas y pendientes
 
-- **WhatsApp deshabilitado en producción** hasta que Meta apruebe la plantilla y haya un token permanente. Para habilitarlo basta con `fly secrets set WHATSAPP_ACCESS_TOKEN=... WHATSAPP_TEMPLATE_NAME=...`; no requiere cambios de código.
+- **WhatsApp usa el número de prueba de Meta**, que solo entrega a sus destinatarios autorizados (máx. 5). Por eso el canal se limita con `TEST_WAPP_NUMBERS`. Para sumar un número: autorizarlo en el panel de Meta y agregarlo a `TEST_WAPP_NUMBERS` (y a `ALLOWED_PHONES`) con `fly secrets set`; no requiere cambios de código.
 - **`NotificationRecord` no se persiste**, así que no hay historial de envíos. Es necesario antes de implementar cobro por notificación.
 - **Sin verificación de identidad** por celular: ver `ALLOWED_PHONES`.
 - **Canal CALL (Twilio):** es un stub y siempre devuelve `FAILED`.

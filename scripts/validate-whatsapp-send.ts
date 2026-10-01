@@ -31,6 +31,7 @@ async function main() {
     phoneNumberId: env.whatsapp.phoneNumberId,
     accessToken: env.whatsapp.accessToken,
     templateName: env.whatsapp.templateName,
+    templateLanguage: env.whatsapp.templateLanguage,
     apiVersion: env.whatsapp.apiVersion,
     defaultCountryCode: env.whatsapp.defaultCountryCode,
   });

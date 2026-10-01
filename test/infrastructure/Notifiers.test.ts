@@ -99,6 +99,40 @@ describe("WhatsAppNotifier", () => {
     expect(result.status).toBe(NotificationStatus.FAILED);
     expect(result.errorMessage).toContain("400");
   });
+
+  it("usa el idioma configurado de la plantilla (por defecto es)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: vi.fn() });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const base = { phoneNumberId: "123", accessToken: "token", templateName: "evento_disponible", apiVersion: "v20.0" };
+    await new WhatsAppNotifier(base).send(subscription, fakeEvent);
+    await new WhatsAppNotifier({ ...base, templateLanguage: "es_CO" }).send(subscription, fakeEvent);
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).template.language.code).toBe("es");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).template.language.code).toBe("es_CO");
+  });
+
+  it("agrega una pista cuando el destinatario no está autorizado en el número de prueba (#131030)", async () => {
+    const metaError = JSON.stringify({
+      error: { message: "(#131030) Recipient phone number not in allowed list", code: 131030 },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 400, text: vi.fn().mockResolvedValue(metaError) })
+    );
+
+    const notifier = new WhatsAppNotifier({
+      phoneNumberId: "123",
+      accessToken: "token",
+      templateName: "evento_disponible",
+      apiVersion: "v20.0",
+    });
+    const result = await notifier.send(subscription, fakeEvent);
+
+    expect(result.status).toBe(NotificationStatus.FAILED);
+    expect(result.errorMessage).toContain("131030");
+    expect(result.errorMessage).toContain("lista de autorizados");
+  });
 });
 
 describe("BrevoEmailNotifier", () => {

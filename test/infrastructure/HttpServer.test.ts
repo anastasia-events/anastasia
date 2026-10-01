@@ -154,3 +154,79 @@ describe("POST /api/subscriptions/email + GET /api/users/me", () => {
     expect((await res.json()).email).toBeNull();
   });
 });
+
+describe("WhatsApp restringido a TEST_WAPP_NUMBERS", () => {
+  let restrictedServer: Server;
+  let restrictedUrl: string;
+
+  beforeEach(async () => {
+    const db = openDatabase(":memory:");
+    const users = new SqliteUserRepository(db);
+    const subscriptions = new SqliteSubscriptionRepository(db);
+    const app = buildHttpServer({
+      watchedEvents: [
+        {
+          id: "crowder:x",
+          name: "Evento X",
+          venue: "Venue X",
+          provider: {} as WatchedEventEntry["provider"],
+          subscribe: {
+            execute: vi.fn().mockImplementation(async (userId, eventId, channel, channelTarget) =>
+              Subscription.create({ userId, eventId, channel, channelTarget })
+            ),
+          },
+        },
+      ],
+      pendingTelegramLinks: new PendingTelegramLinkStore(),
+      findOrCreateUser: new FindOrCreateUserByPhone(users),
+      userRepository: users,
+      subscriptionRepository: subscriptions,
+      listUserSubscriptions: new ListUserSubscriptions(subscriptions),
+      unsubscribeUser: new UnsubscribeUser(subscriptions),
+      telegramBotUsername: "test_bot",
+      frontendOrigin: "http://localhost:5173",
+      whatsappPhones: new Set(["3147229936"]),
+    });
+    restrictedServer = app.listen(0);
+    await new Promise((resolve) => restrictedServer.once("listening", resolve));
+    restrictedUrl = `http://127.0.0.1:${(restrictedServer.address() as AddressInfo).port}`;
+  });
+
+  afterEach(() => {
+    restrictedServer.close();
+  });
+
+  async function channelsFor(query: string): Promise<string[]> {
+    return (await fetch(`${restrictedUrl}/api/channels${query}`)).json();
+  }
+
+  it("/api/channels ofrece WhatsApp solo a los números de la lista (con o sin +57)", async () => {
+    expect(await channelsFor("?phone=3147229936")).toContain("WHATSAPP");
+    expect(await channelsFor("?phone=%2B57%20314%20722%209936")).toContain("WHATSAPP");
+    expect(await channelsFor("?phone=3001234567")).not.toContain("WHATSAPP");
+    expect(await channelsFor("")).not.toContain("WHATSAPP");
+    expect(await channelsFor("?phone=3001234567")).toEqual(["TELEGRAM", "EMAIL"]);
+  });
+
+  it("el alta por WhatsApp responde 403 whatsapp_not_allowed fuera de la lista", async () => {
+    const subscribe = (phone: string) =>
+      fetch(`${restrictedUrl}/api/subscriptions/whatsapp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: "crowder:x", phone }),
+      });
+
+    const denied = await subscribe("3001234567");
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toEqual({ error: "whatsapp_not_allowed" });
+
+    const allowed = await subscribe("3147229936");
+    expect(allowed.status).toBe(200);
+    expect((await allowed.json()).subscriptionId).toBeTruthy();
+  });
+
+  it("sin lista, WhatsApp queda para cualquiera (servidor por defecto)", async () => {
+    const list = await (await fetch(`${baseUrl}/api/channels?phone=3001234567`)).json();
+    expect(list).toContain("WHATSAPP");
+  });
+});

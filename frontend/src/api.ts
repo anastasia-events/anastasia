@@ -44,8 +44,9 @@ export async function startSession(phone: string): Promise<string> {
   return body.phone;
 }
 
-export async function fetchEnabledChannels(): Promise<Channel[]> {
-  const res = await fetch("/api/channels");
+// Con `phone`, el server decide por número (WhatsApp solo para TEST_WAPP_NUMBERS).
+export async function fetchEnabledChannels(phone?: string | null): Promise<Channel[]> {
+  const res = await fetch(phone ? `/api/channels?phone=${encodeURIComponent(phone)}` : "/api/channels");
   if (!res.ok) throw new Error("No se pudieron cargar los canales");
   return res.json();
 }

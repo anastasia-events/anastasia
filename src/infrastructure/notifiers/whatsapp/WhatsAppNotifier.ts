@@ -8,6 +8,9 @@ export interface WhatsAppConfig {
   phoneNumberId: string;
   accessToken: string;
   templateName: string;
+  // Código de idioma EXACTO con el que se aprobó la plantilla en Meta
+  // ("es", "es_CO", "es_ES"...). Si no coincide, Meta responde #132001.
+  templateLanguage?: string;
   apiVersion: string;
   // Se antepone a los celulares locales de 10 dígitos (así se guardan en la
   // base); sin él Meta interpreta otro número y responde #131030.
@@ -19,14 +22,33 @@ function toInternational(target: string, countryCode: string): string {
   return digits.length === 10 ? `${countryCode}${digits}` : digits;
 }
 
+// Los errores de la Cloud API son crípticos; estas pistas van al log de
+// [notify] para saber qué tocar sin ir a buscar el código en la doc de Meta.
+const ERROR_HINTS: Record<number, string> = {
+  131030:
+    "el destinatario no está en la lista de autorizados del número de prueba (agregarlo en el panel de Meta → Configuración de la API → \"Para\")",
+  132001: "la plantilla o su idioma no existen (revisar WHATSAPP_TEMPLATE_NAME y WHATSAPP_TEMPLATE_LANGUAGE)",
+  132000: "la cantidad de parámetros no coincide con la plantilla aprobada",
+  190: "el token venció o es inválido (usar un token permanente de Usuario del sistema)",
+};
+
+function errorHint(body: string): string | undefined {
+  try {
+    const code = JSON.parse(body)?.error?.code;
+    return typeof code === "number" ? ERROR_HINTS[code] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Manda un mensaje de plantilla vía la Cloud API de Meta. Un aviso de
  * disponibilidad es business-initiated (no una respuesta dentro de las 24h
  * de una conversación), así que la API RECHAZA texto libre acá — tiene que
- * ser una plantilla ya aprobada en Meta Business Manager. Los params y su
- * orden (`WHATSAPP_TEMPLATE_NAME`) hay que ajustarlos para que coincidan
- * exactamente con la plantilla real una vez aprobada — esto es un primer
- * intento razonable con [nombre, recinto, estado en español].
+ * ser una plantilla ya aprobada en Meta Business Manager. La plantilla
+ * aprobada tiene 3 variables en el cuerpo, en este orden: {{1}} evento,
+ * {{2}} recinto, {{3}} estado en español. Si se cambia la plantilla, hay
+ * que ajustar estos parámetros.
  */
 export class WhatsAppNotifier implements NotificationPort {
   constructor(private readonly config: WhatsAppConfig) {}
@@ -47,7 +69,7 @@ export class WhatsAppNotifier implements NotificationPort {
             type: "template",
             template: {
               name: this.config.templateName,
-              language: { code: "es" },
+              language: { code: this.config.templateLanguage ?? "es" },
               components: [
                 {
                   type: "body",
@@ -65,9 +87,10 @@ export class WhatsAppNotifier implements NotificationPort {
 
       if (!response.ok) {
         const body = await response.text();
+        const hint = errorHint(body);
         return {
           status: NotificationStatus.FAILED,
-          errorMessage: `WhatsApp API ${response.status}: ${body}`,
+          errorMessage: `WhatsApp API ${response.status}: ${body}${hint ? ` — ${hint}` : ""}`,
         };
       }
 

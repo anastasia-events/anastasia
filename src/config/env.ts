@@ -36,6 +36,9 @@ export const env = {
   watchedEventsFile: process.env.WATCHED_EVENTS_FILE ?? "./config/watched-events.json",
 
   pollingIntervalSeconds: optionalEnvInt("POLLING_INTERVAL_SECONDS", 15),
+  // Log de auditoría de los schedulers (un latido por tick + resultado de
+  // cada revisión). En Fly va al volumen para sobrevivir a reinicios.
+  schedulerLogFile: process.env.SCHEDULER_LOG_FILE ?? "./data/scheduler.log",
 
   // Rate limiting / reintentos contra Ticketmaster Discovery API — ajustable
   // por configuración sin tocar código, ya que el tier/cuota puede cambiar.
@@ -61,6 +64,12 @@ export const env = {
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
     templateName: process.env.WHATSAPP_TEMPLATE_NAME,
+    // Idioma exacto con el que Meta aprobó la plantilla (ej. "es", "es_CO").
+    templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? "es",
+    // Celulares que pueden activar el canal WhatsApp, separados por coma.
+    // Mientras se usa el número de prueba de Meta, que solo entrega a sus
+    // destinatarios autorizados. Vacío = sin restricción.
+    testNumbers: process.env.TEST_WAPP_NUMBERS,
     apiVersion: process.env.WHATSAPP_API_VERSION ?? "v20.0",
     // Los celulares se guardan sin código de país; la Cloud API lo exige.
     defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE ?? "57",
