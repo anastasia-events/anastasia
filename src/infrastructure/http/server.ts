@@ -43,6 +43,9 @@ export interface HttpServerDeps {
   allowedPhones?: Set<string>;
   // Canales que se pueden activar desde la web. Sin definir = todos.
   enabledChannels?: Set<NotificationChannel>;
+  // Celulares (normalizados) que pueden usar WhatsApp — el número de prueba
+  // de Meta solo entrega a sus destinatarios autorizados. Sin definir = todos.
+  whatsappPhones?: Set<string>;
 }
 
 export function buildHttpServer(deps: HttpServerDeps): Express {
@@ -90,9 +93,23 @@ export function buildHttpServer(deps: HttpServerDeps): Express {
     return true;
   }
 
-  app.get("/api/channels", (_req, res) => {
+  function canUseWhatsApp(phone: string | null): boolean {
+    return !deps.whatsappPhones || (phone !== null && deps.whatsappPhones.has(phone));
+  }
+
+  // `phone` es opcional: sin él (o fuera de TEST_WAPP_NUMBERS) WhatsApp no se
+  // ofrece si hay restricción. No pasa por readPhone para no responder 403 a
+  // una consulta que solo decide qué botones mostrar.
+  app.get("/api/channels", (req, res) => {
+    const phone = typeof req.query.phone === "string" ? normalizePhone(req.query.phone) || null : null;
     const all = [NotificationChannel.TELEGRAM, NotificationChannel.WHATSAPP, NotificationChannel.EMAIL];
-    res.json(all.filter((channel) => !deps.enabledChannels || deps.enabledChannels.has(channel)));
+    res.json(
+      all.filter(
+        (channel) =>
+          (!deps.enabledChannels || deps.enabledChannels.has(channel)) &&
+          (channel !== NotificationChannel.WHATSAPP || canUseWhatsApp(phone))
+      )
+    );
   });
 
   app.get("/api/events", (_req, res) => {
@@ -152,6 +169,10 @@ export function buildHttpServer(deps: HttpServerDeps): Express {
     }
     const phone = readPhone(rawPhone, res);
     if (!phone) return;
+    if (!canUseWhatsApp(phone)) {
+      res.status(403).json({ error: "whatsapp_not_allowed" });
+      return;
+    }
 
     const user = await deps.findOrCreateUser.execute(phone);
     // El target de WhatsApp es el mismo celular usado como identidad — no

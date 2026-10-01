@@ -64,6 +64,12 @@ export const env = {
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
     templateName: process.env.WHATSAPP_TEMPLATE_NAME,
+    // Idioma exacto con el que Meta aprobó la plantilla (ej. "es", "es_CO").
+    templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? "es",
+    // Celulares que pueden activar el canal WhatsApp, separados por coma.
+    // Mientras se usa el número de prueba de Meta, que solo entrega a sus
+    // destinatarios autorizados. Vacío = sin restricción.
+    testNumbers: process.env.TEST_WAPP_NUMBERS,
     apiVersion: process.env.WHATSAPP_API_VERSION ?? "v20.0",
     // Los celulares se guardan sin código de país; la Cloud API lo exige.
     defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE ?? "57",

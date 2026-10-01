@@ -63,6 +63,7 @@ export function buildContainer(options: ContainerOptions = {}) {
         phoneNumberId: env.whatsapp.phoneNumberId,
         accessToken: env.whatsapp.accessToken,
         templateName: env.whatsapp.templateName,
+        templateLanguage: env.whatsapp.templateLanguage,
         apiVersion: env.whatsapp.apiVersion,
         defaultCountryCode: env.whatsapp.defaultCountryCode,
       })
@@ -315,6 +316,7 @@ export function buildContainer(options: ContainerOptions = {}) {
     frontendOrigin: env.frontendOrigin,
     staticDir: env.staticDir,
     allowedPhones: parseAllowedPhones(env.allowedPhones),
+    whatsappPhones: parseAllowedPhones(env.whatsapp.testNumbers),
     enabledChannels: new Set(notifiersByChannel.keys()),
     whatsappWebhook:
       env.whatsapp.webhookVerifyToken && env.whatsapp.appSecret
