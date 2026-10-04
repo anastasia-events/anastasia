@@ -57,8 +57,8 @@ export const env = {
     pageCacheTtlSeconds: optionalEnvInt("CROWDER_PAGE_CACHE_TTL_SECONDS", 60),
   },
 
-  // Notificadores opcionales: si faltan sus variables, container.ts no los
-  // registra en notifiersByChannel (mismo patrón opt-in que Crowder) y esos
+  // Notificadores opcionales: si faltan sus variables, notifiers.ts no los
+  // registra (mismo patrón opt-in que Crowder) y esos
   // canales quedan marcados FAILED al notificar, sin romper el arranque.
   whatsapp: {
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
