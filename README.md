@@ -103,6 +103,8 @@ flowchart LR
 │   ├── config/
 │   │   ├── env.ts                 # Variables de entorno tipadas (requeridas y opcionales)
 │   │   ├── container.ts           # Composition root: instancia y conecta todo
+│   │   ├── notifiers.ts           # Registro de notificadores (los opt-in solo con credenciales)
+│   │   ├── eventWatchers.ts       # Provider, casos de uso y scheduler de cada fuente de eventos
 │   │   └── watchedEventsConfig.ts # Lee y valida watched-events.json
 │   ├── domain/
 │   │   ├── entities/              # Event, Subscription, User, NotificationRecord
@@ -132,7 +134,8 @@ flowchart LR
 │       ├── scheduler/
 │       │   └── PollingScheduler.ts # setInterval con ventanas activas por evento
 │       └── telegram/
-│           └── PendingTelegramLinkStore.ts # Tokens en memoria para el deep link del bot
+│           ├── PendingTelegramLinkStore.ts # Tokens en memoria para el deep link del bot
+│           └── TelegramBotCommands.ts      # Comandos del bot (/start, /misuscripciones, /unsuscribe, botones)
 ├── frontend/                      # SPA React (ver sección Frontend)
 ├── scripts/                       # Herramientas manuales (ver Scripts de soporte)
 ├── test/                          # Vitest: domain / application / infrastructure
@@ -330,7 +333,7 @@ Los canales deshabilitados no aparecen en `/api/channels` ni en la web.
 ```
 
 - `name` y `venue` son los textos que ven los usuarios, tanto en la web como en las notificaciones.
-- En Crowder, `id` es la **clave del ítem dentro de la página**. El id global (`crowder:<página>/<id>`) lo arma `container.ts`.
+- En Crowder, `id` es la **clave del ítem dentro de la página**. El id global (`crowder:<página>/<id>`) lo arma `src/config/eventWatchers.ts`.
 - `activeFrom` y `activeUntil` son opcionales. Sin ellos, el evento se vigila siempre.
 - El archivo se valida al arrancar: campos obligatorios e ids repetidos dentro de una misma página. Si hay un error, la app no arranca.
 
@@ -498,14 +501,14 @@ fly logs -a event-wa
 **Nuevo proveedor de eventos**
 1. Implementa `EventProviderPort` en `src/infrastructure/event-providers/<proveedor>/`.
 2. Usa un prefijo de id propio para no chocar con los demás proveedores.
-3. En `container.ts`, crea su `CheckEventAvailability`, `SubscribeUserToEvent` y `PollingScheduler`, y agrega sus entradas a `watchedEvents`.
+3. En `src/config/eventWatchers.ts`, escribe su `build<Proveedor>Watches`: crea el provider y llama a `buildWatch`, que arma `CheckEventAvailability`, `SubscribeUserToEvent`, `PollingScheduler` y las entradas de `watchedEvents`. Después agrégalo a la lista `watches` de `container.ts`.
 
 No hace falta tocar el dominio ni el esquema de la base.
 
 **Nuevo canal de notificación**
 1. Agrega el valor a `NotificationChannel`.
 2. Implementa `NotificationPort` en `src/infrastructure/notifiers/<canal>/` (usa `statusLabel()` para el texto).
-3. Regístralo en `notifiersByChannel` de `container.ts` cuando tenga credenciales.
+3. Agrega una entrada en `NOTIFIER_REGISTRATIONS` de `src/config/notifiers.ts`. Si faltan sus credenciales, debe devolver `undefined`.
 4. Agrega la ruta de alta en `server.ts` (con `readPhone` e `isChannelEnabled`) y el canal en `/api/channels` y en el frontend (`CHANNEL_OPTIONS`, `CHANNELS`).
 
 ---
